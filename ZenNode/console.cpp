@@ -6,7 +6,7 @@
 //
 // Description: Screen I/O routines for ZenNode
 //
-// Copyright (c) 2000-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 2000-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -34,11 +34,6 @@
 //
 //----------------------------------------------------------------------------
 
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #if defined ( __OS2__ )
     #include <conio.h>
     #include <dos.h>
@@ -48,68 +43,67 @@
     #include <os2.h>
 #elif defined ( __WIN32__ )
     #include <conio.h>
-    #include <dos.h>
-    #include <io.h>
     #include <signal.h>
     #include <windows.h>
-    #include <wincon.h>
-#elif defined ( __GNUC__ )
+#elif defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
+    #include <memory.h>
     #include <stdarg.h>
+    #include <stdio.h>
+    #include <stdlib.h>
     #include <signal.h>
     #include <sys/time.h>
     #include <termios.h>
     #include <unistd.h>
+    #include "level.hpp"
 #else
     #error This program must be compiled as a 32-bit app.
 #endif
 
 #include "common.hpp"
-#include "wad.hpp"
-#include "level.hpp"
-#include "ZenNode.hpp"
+#include "console.hpp"
 
-void SaveConsoleSettings ();
-void RestoreConsoleSettings ();
-void HideCursor ();
-void ShowCursor ();
+static UINT32 curX = 0;
+static UINT32 curY = 0;
 
-ULONG startX, startY;
+UINT32 startX, startY;
 char  progress [4] = { 0x7C, 0x2F, 0x2D, 0x5C };
 int   progressIndex;
 
 #if defined ( __OS2__ )
 
+static HVIO hVio = 0;
 static VIOCURSORINFO vioco;
 static int oldAttr;
-static ULONG sx, sy;
 
 void SaveConsoleSettings ()
 {
-    VioGetCurType ( &vioco, 0 );
+    VioGetCurType ( &vioco, hVio );
     oldAttr = vioco.attr;
     vioco.attr = 0xFFFF;
-    VioSetCurType ( &vioco, 0 );
+    VioSetCurType ( &vioco, hVio );
 }
 
 void RestoreConsoleSettings ()
 {
     vioco.attr = oldAttr;
-    VioSetCurType ( &vioco, 0 );
+    VioSetCurType ( &vioco, hVio );
 }
 
-void GetXY ( ULONG *x, ULONG *y )
+void GetXY ( UINT32 *x, UINT32 *y )
 {
-    VioGetCurPos ( y, x, 0 );
+    VioGetCurPos ( y, x, hVio );
 }
 
-void GotoXY ( ULONG x, ULONG y )
+void GotoXY ( UINT32 x, UINT32 y )
 {
-    VioSetCurPos ( y, x, 0 );
+    curX = x;
+    curY = y;
+    VioSetCurPos ( y, x, hVio );
 }
 
-ULONG CurrentTime ()
+UINT32 CurrentTime ()
 {
-    ULONG time;
+    UINT32 time;
     DosQuerySysInfo ( QSV_MS_COUNT, QSV_MS_COUNT, &time, 4 );
     return time;
 }
@@ -117,52 +111,52 @@ ULONG CurrentTime ()
 void Status ( char *message )
 {
     int len = strlen ( message );
-    VioWrtCharStr (( BYTE * ) message, len, startY, startX, 0 );
-    VioWrtNChar (( BYTE * )  " ", 80 - ( startX + len ), startY, startX + len, 0 );
-    sy = startY;
-    sx = startX + len;
+    VioWrtCharStr (( BYTE * ) message, len, startY, startX, hVio );
+    VioWrtNChar (( BYTE * )  " ", 80 - ( startX + len ), startY, startX + len, hVio );
+    curY = startY;
+    curX = startX + len;
 }
 
 void GoRight ()
 {
-    VioWrtNChar (( BYTE * )  "R", 1, sy, sx++, 0 );
+    VioWrtNChar (( BYTE * ) "R", 1, curY, curX++, hVio );
 }
 
 void GoLeft ()
 {
-    VioWrtNChar (( BYTE * )  "L", 1, sy, sx - 1 , 0 );
+    VioWrtNChar (( BYTE * ) "L", 1, curY, curX - 1 , hVio );
 }
 
 void Backup ()
 {
-    sx--;
+    curX--;
 }
 
 void ShowDone ()
 {
-    VioWrtNChar (( BYTE * )  "*", 1, sy, sx, 0 );
+    VioWrtNChar (( BYTE * ) "*", 1, curY, curX, hVio );
 }
 
 void ShowProgress ()
 {
-    VioWrtNChar (( BYTE * ) &progress [ progressIndex++ % SIZE ( progress )], 1, sy, sx, 0 );
+    VioWrtNChar (( BYTE * ) &progress [ progressIndex++ % SIZE ( progress )], 1, curY, curX, hVio );
 }
 
 void MoveUp ( int delta )
 {
-    sy -= delta;
-    VioSetCurPos ( sy, 0, 0 );
+    curY -= delta;
+    VioSetCurPos ( curY, 0, hVio );
 }
 
 void MoveDown ( int delta )
 {
-    sy += delta;
-    VioSetCurPos ( sy, 0, 0 );
+    curY += delta;
+    VioSetCurPos ( curY, 0, hVio );
 }
 
 #elif defined ( __WIN32__ )
 
-#if defined ( __GNUC__ )
+#if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
 #define cprintf _cprintf
 #endif
 
@@ -189,12 +183,6 @@ void SignalHandler ( int )
     exit ( -1 );
 }
 
-void RestoreConsoleSettings ()
-{
-    cursorInfo.bVisible = oldVisible;
-    SetConsoleCursorInfo ( hOutput, &cursorInfo );
-}
-
 void SaveConsoleSettings ()
 {
     hOutput = GetStdHandle ( STD_OUTPUT_HANDLE );
@@ -207,6 +195,12 @@ void SaveConsoleSettings ()
     atexit ( RestoreConsoleSettings );
 
     QueryPerformanceFrequency ( &timerFrequency );
+}
+
+void RestoreConsoleSettings ()
+{
+    cursorInfo.bVisible = oldVisible;
+    SetConsoleCursorInfo ( hOutput, &cursorInfo );
 }
 
 void HideCursor ()
@@ -222,8 +216,6 @@ void ShowCursor ()
     info.bVisible = TRUE;
     SetConsoleCursorInfo ( hOutput, &info );
 }
-
-#include <stdio.h>
 
 int GetKey ()
 {
@@ -252,36 +244,69 @@ bool KeyPressed ()
     return ( kbhit () != 0 ) ? true : false;
 }
 
-ULONG CurrentTime ()
+UINT32 CurrentTime ()
 {
     LARGE_INTEGER time;
     QueryPerformanceCounter ( &time );
 
-    return ( ULONG ) ( 1000 * time.QuadPart / timerFrequency.QuadPart );
+    return ( UINT32 ) ( 1000 * time.QuadPart / timerFrequency.QuadPart );
 }
 
-void GetXY ( ULONG *x, ULONG *y )
+void ClearScreen ()
+{
+    DWORD dwActual;
+    COORD origin;
+    origin.X = 0;
+    origin.Y = 0;
+    FillConsoleOutputCharacter ( hOutput, ' ', screenInfo.dwSize.X * screenInfo.dwSize.Y, origin, &dwActual );
+
+    screenInfo.dwCursorPosition.X = 0;
+    screenInfo.dwCursorPosition.Y = 0;
+}
+
+void GetXY ( UINT32 *x, UINT32 *y )
 {
     GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
     *x = screenInfo.dwCursorPosition.X;
     *y = screenInfo.dwCursorPosition.Y;
 }
 
-void GotoXY ( ULONG x, ULONG y )
+void GotoXY ( UINT32 x, UINT32 y )
 {
+    curX = x;
+    curY = y;
+
+    COORD cursor;
+    cursor.X = ( SHORT ) curX;
+    cursor.Y = ( SHORT ) curY;
+    SetConsoleCursorPosition ( hOutput, cursor );
+}
+
+void MoveUp ( int delta )
+{
+    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
     COORD pos;
-    pos.X = ( SHORT ) x;
-    pos.Y = ( SHORT ) y;
+    pos.X = ( SHORT ) 0;
+    pos.Y = ( SHORT ) ( screenInfo.dwCursorPosition.Y - delta );
+    SetConsoleCursorPosition ( hOutput, pos );
+}
+
+void MoveDown ( int delta )
+{
+    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
+    COORD pos;
+    pos.X = ( SHORT ) 0;
+    pos.Y = ( SHORT ) ( screenInfo.dwCursorPosition.Y + delta );
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
 void Status ( char *message )
 {
     DWORD count;
-    int len = strlen ( message );
+    DWORD len = ( DWORD ) strlen ( message );
     currentPos.X = ( SHORT ) startX;
     currentPos.Y = ( SHORT ) startY;
-    if ( len ) {
+    if ( len != 0 ) {
         WriteConsoleOutputCharacter ( hOutput, message, len, currentPos, &count );
         currentPos.X = ( SHORT ) ( currentPos.X + len );
     }
@@ -320,25 +345,7 @@ void ShowProgress ()
     WriteConsoleOutputCharacter ( hOutput, &progress [ progressIndex++ % SIZE ( progress )], 1, currentPos, &count );
 }
 
-void MoveUp ( int delta )
-{
-    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
-    COORD pos;
-    pos.X = ( SHORT ) 0;
-    pos.Y = ( SHORT ) ( screenInfo.dwCursorPosition.Y - delta );
-    SetConsoleCursorPosition ( hOutput, pos );
-}
-
-void MoveDown ( int delta )
-{
-    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
-    COORD pos;
-    pos.X = ( SHORT ) 0;
-    pos.Y = ( SHORT ) ( screenInfo.dwCursorPosition.Y + delta );
-    SetConsoleCursorPosition ( hOutput, pos );
-}
-
-#elif defined ( __GNUC__ )
+#elif defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
 
 static FILE *console;
 static termios stored;
@@ -348,41 +355,18 @@ static int lastChar;
 static int keyhit;
 static bool cursor_visible = true;
 
-extern char *strupr ( char *ptr );
-
-int GetKey ()
-{
-    int retVal = lastChar;
-    lastChar = 0;
-
-    if ( keyhit == 0 ) {
-        tcsetattr ( 0, TCSANOW, &term_getch );
-        keyhit = read ( STDIN_FILENO, &retVal, sizeof ( retVal ));
-    }
-
-    keyhit = 0;
-
-    return retVal;
-}
-
-bool KeyPressed ()
-{
-    if ( keyhit == 0 ) {
-        tcsetattr ( 0, TCSANOW, &term_kbhit );
-        keyhit = read ( STDIN_FILENO, &lastChar, sizeof ( lastChar ));
-    }
-
-    return ( keyhit != 0 ) ? true : false;
-}
-
-void cprintf ( char *fmt, ... )
+int cprintf ( const char *fmt, ... )
 {
     va_list args;
     va_start ( args, fmt );
 
-    vfprintf ( console, fmt, args );
+    int ret = vfprintf ( console, fmt, args );
+
+    fflush ( console );
 
     va_end ( args );
+
+    return ret;
 }
 
 void SignalHandler ( int signal )
@@ -394,6 +378,8 @@ void SignalHandler ( int signal )
         case SIGABRT :
             RestoreConsoleSettings ();
             break;
+        case SIGSEGV :
+            fprintf ( stderr, "Segmentation fault" );
         case SIGINT :
             RestoreConsoleSettings ();
             printf ( "\r\n" );
@@ -436,8 +422,9 @@ void SaveConsoleSettings ()
     struct sigaction sa;
     memset ( &sa, 0, sizeof ( sa ));
     sa.sa_handler = SignalHandler;
-    sigaction ( SIGABRT, &sa, NULL );
     sigaction ( SIGINT,  &sa, NULL );
+    sigaction ( SIGABRT, &sa, NULL );
+    sigaction ( SIGSEGV, &sa, NULL );
     sigaction ( SIGTSTP, &sa, NULL );
     sigaction ( SIGCONT, &sa, NULL );
 
@@ -446,23 +433,23 @@ void SaveConsoleSettings ()
 
 void RestoreConsoleSettings ()
 {
+    if ( console != stdout ) {
+        fclose ( console );
+        console = stdout;
+    }
+    
     struct sigaction sa;
     memset ( &sa, 0, sizeof ( sa ));
     sa.sa_handler = SIG_DFL;
-    sigaction ( SIGABRT, &sa, NULL );
     sigaction ( SIGINT,  &sa, NULL );
+    sigaction ( SIGABRT, &sa, NULL );
+    sigaction ( SIGSEGV, &sa, NULL );
     sigaction ( SIGTSTP, &sa, NULL );
     sigaction ( SIGCONT, &sa, NULL );
 
     tcsetattr ( 0, TCSANOW, &stored );
 
     ShowCursor ();
-}
-
-void ClearScreen ()
-{
-    printf ( "\033[2J" );
-    fflush ( stdout );
 }
 
 void HideCursor ()
@@ -483,23 +470,57 @@ void ShowCursor ()
     }
 }
 
-void GetXY ( ULONG *x, ULONG *y )
+int GetKey ()
+{
+    int retVal = lastChar;
+    lastChar = 0;
+
+    if ( keyhit == 0 ) {
+        tcsetattr ( 0, TCSANOW, &term_getch );
+        keyhit = read ( STDIN_FILENO, &retVal, sizeof ( retVal ));
+    }
+
+    keyhit = 0;
+
+    return retVal;
+}
+
+bool KeyPressed ()
+{
+    if ( keyhit == 0 ) {
+        tcsetattr ( 0, TCSANOW, &term_kbhit );
+        keyhit = read ( STDIN_FILENO, &lastChar, sizeof ( lastChar ));
+    }
+
+    return ( keyhit != 0 ) ? true : false;
+}
+
+UINT32 CurrentTime ()
+{
+    timeval time;
+    gettimeofday ( &time, NULL );
+    return ( UINT32 ) (( time.tv_sec * 1000 ) + ( time.tv_usec / 1000 ));
+}
+
+void ClearScreen ()
+{
+    printf ( "\033[2J" );
+    fflush ( stdout );
+}
+
+void GetXY ( UINT32 *x, UINT32 *y )
 {
     *x = MAX_LUMP_NAME + 5;
     *y = 0;
 }
 
-void GotoXY ( ULONG x, ULONG y )
+void GotoXY ( UINT32 x, UINT32 y )
 {
+//    fprintf ( console, "\033[%d;%dH", y, x );
     fprintf ( console, "\033[%dG", x );
     fflush ( console );
-}
-
-ULONG CurrentTime ()
-{
-    timeval time;
-    gettimeofday ( &time, NULL );
-    return ( ULONG ) (( time.tv_sec * 1000 ) + ( time.tv_usec / 1000 ));
+    curX = x;
+    curY = y;
 }
 
 void Status ( char *message )

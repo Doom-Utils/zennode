@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
-// File:        BSPInfo.cpp
+// File:        bspinfo.cpp
 // Date:        11-Oct-1995
 // Programmer:  Marc Rousseau
 //
-// Description: An application to analyze the contents of a BSP
+// Description: An application to analyze the contents of a BSP tree
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1995-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,23 +27,39 @@
 //----------------------------------------------------------------------------
 
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "common.hpp"
+#include "logger.hpp"
 #include "wad.hpp"
 #include "level.hpp"
+#include "console.hpp"
 
-#define VERSION		"1.02"
-#define MAX_LEVELS	50
-
-#if defined ( __OS2__ ) || defined ( __WIN32__ )
-
-#define SEPERATOR	'\\'
-
+#if defined ( __OS2__ )
+    #include <conio.h>
+    #include <io.h>
+#elif defined ( __WIN32__ )
+    #include <conio.h>
+    #include <io.h>
+#elif defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
+    #include <unistd.h>
 #else
+    #error This program must be compiled as a 32-bit app.
+#endif
 
-#define SEPERATOR	'/'
+DBG_REGISTER ( __FILE__ );
+
+#define VERSION		"1.3"
+#define BANNER          "BSPInfo Version " VERSION " (c) 1995-2004 Marc Rousseau"
+#define MAX_LEVELS	99
+
+#if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
+
+#define stricmp strcasecmp
+
+extern char *strupr ( char *ptr );
 
 #endif
 
@@ -53,87 +69,99 @@ struct {
 
 void printHelp ()
 {
-    fprintf ( stderr, "Usage:\n\n" );
-    fprintf ( stderr, "  bspInfo [-options] filename[.wad] [level[+level]]\n\n" );
-    fprintf ( stderr, "        -x+ turn on option   -x- turn off option  * = default\n\n" );
+    fprintf ( stderr, "Usage: bspInfo [-options] filename[.wad] [level[+level]]\n" );
+    fprintf ( stderr, "\n" );
+    fprintf ( stderr, "     -x+ turn on option   -x- turn off option  %c = default\n", DEFAULT_CHAR );
+    fprintf ( stderr, "\n" );
     fprintf ( stderr, "        -t    - Display NODE tree\n" );
     fprintf ( stderr, "\n" );
     fprintf ( stderr, "        level - ExMy for DOOM / Heretic\n" );
     fprintf ( stderr, "                MAPxx for DOOM II / HEXEN\n" );
 }
 
-int parseArgs ( int index, char *argv[] )
+int parseArgs ( int index, const char *argv [] )
 {
+    FUNCTION_ENTRY ( NULL, "parseArgs", true );
+
+    bool errors = false;
     while ( argv [ index ] ) {
-        char *ptr = argv [ index ];
-        if ( *ptr != '-' ) break;
-        index++;
-        while ( *ptr ) {
-            int ch = *ptr++;
-            if ( ch != '-' ) return index;
-            int option = toupper ( *ptr++ );
+
+        if ( argv [index][0] != '-' ) break;
+
+        char *localCopy = strdup ( argv [ index ]);
+        char *ptr = localCopy + 1;
+        strupr ( localCopy );
+
+        bool localError = false;
+        while ( *ptr && ( localError == false )) {
+            int option = *ptr++;
             bool setting = true;
             if (( *ptr == '+' ) || ( *ptr == '-' )) {
-                setting = ( *ptr++ == '+' ) ? true : false;
+                setting = ( *ptr == '-' ) ? false : true;
+                ptr++;
             }
             switch ( option ) {
                 case 'T' : flags.Tree = setting;	break;
-                default  : fprintf ( stderr, "Unrecognized parameter '%s'\n", argv [ index-1 ] );
-                           return -1;
+                default  : localError = true;
             }
         }
+        if ( localError ) {
+            errors = true;
+            int offset = ptr - localCopy - 1;
+            size_t width = strlen ( ptr ) + 1;
+            fprintf ( stderr, "Unrecognized parameter '%*.*s'\n", width, width, argv [index] + offset );
+        }
+        free ( localCopy );
+        index++;
     }
+
+    if ( errors ) fprintf ( stderr, "\n" );
+
     return index;
 }
 
-int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadList *list )
+int getLevels ( int argIndex, const char *argv [], char names [][MAX_LUMP_NAME], wadList *list )
 {
+    FUNCTION_ENTRY ( NULL, "getLevels", true );
+
     int index = 0, errors = 0;
 
     char buffer [128];
     buffer [0] = '\0';
     if ( argv [argIndex] ) {
         strcpy ( buffer, argv [argIndex] );
+        strupr ( buffer );
     }
+    char *ptr = strtok ( buffer, "+" );
 
     // See if the user requested specific levels
-    if ( WAD::IsMap ( buffer )) {
+    if ( WAD::IsMap ( ptr )) {
         argIndex++;
-        char *ptr = buffer;
-        for ( EVER ) {
-            char levelName [ 9 ];
-            strncpy ( levelName, ptr, MAX_LUMP_NAME );
-            int length = ( *ptr == 'M' ) ? 5 : 4;
-            levelName [ length ] = '\0';
-            if ( ! list->FindWAD ( levelName )) {
-                fprintf ( stderr, "  Could not find %s\n", levelName );
-                errors++;
+        while ( ptr ) {
+            if ( WAD::IsMap ( ptr )) {
+                if ( list->FindWAD ( ptr )) {
+                    strcpy ( names [index++], ptr );
+                } else {
+                    fprintf ( stderr, "  Could not find %s\n", ptr, errors++ );
+                }
             } else {
-                strcpy ( names [index++], levelName );
+                fprintf ( stderr, "  %s is not a valid name for a level\n", ptr, errors++ );
             }
-            ptr += length;
-            if ( *ptr++ != '+' ) break;
-            if ( ! WAD::IsMap ( ptr )) {
-                do {
-                    char *end = ptr;
-                    while ( *end && ( *end != '+' )) end++;
-                    fprintf ( stderr, "  %*.*s is not a valid name for a level\n", end-ptr, end-ptr, ptr );
-                    errors++;
-                    ptr = end ? end+1 : NULL;
-                } while ( ptr && ! WAD::IsMap ( ptr ));
-                if ( ptr == NULL ) break;
-            }
+            ptr = strtok ( NULL, "+" );
         }
     } else {
         int size = list->DirSize ();
         const wadListDirEntry *dir = list->GetDir ( 0 );
         for ( int i = 0; i < size; i++ ) {
             if ( dir->wad->IsMap ( dir->entry->name )) {
-                if ( index == MAX_LEVELS ) {
-                    fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name );
-                    errors++;
-                } else
-                    memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
+                // Make sure it's really a level
+                if ( strcmp ( dir[1].entry->name, "THINGS" ) == 0 ) {
+                    if ( index == MAX_LEVELS ) {
+                        fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name, errors++ );
+                    } else {
+                        memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
+                    }
+                }
             }
             dir++;
         }
@@ -141,21 +169,46 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
     memset ( names [index], 0, MAX_LUMP_NAME );
 
     if ( errors ) fprintf ( stderr, "\n" );
+
     return argIndex;
 }
 
 void EnsureExtension ( char *fileName, const char *ext )
 {
-    int length = strlen ( fileName );
-    char *ptr = strrchr ( fileName, '.' );
-    if (( ptr && strchr ( ptr, SEPERATOR )) ||
-        ( ! ptr && strcmp ( &fileName[length-4], ext ))) {
+    FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
+
+    // See if the file exists first
+    FILE *file = fopen ( fileName, "rb" );
+    if ( file != NULL ) {
+        fclose ( file );
+        return;
+    }
+
+    size_t length = strlen ( fileName );
+    if ( stricmp ( &fileName [length-4], ext ) != 0 ) {
         strcat ( fileName, ext );
     }
 }
 
-wadList *getInputFiles ( char *cmdLine, char *wadFileName )
+const char *TypeName ( eWadType type )
 {
+    FUNCTION_ENTRY ( NULL, "TypeName", true );
+
+    const char *name = NULL;
+    switch ( type ) {
+        case wt_DOOM    : name = "DOOM";	break;
+        case wt_DOOM2   : name = "DOOM2";	break;
+        case wt_HERETIC : name = "Heretic";	break;
+        case wt_HEXEN   : name = "Hexen";	break;
+        default         : name = "<Unknown>";	break;
+    }
+    return name;
+}
+
+wadList *getInputFiles ( const char *cmdLine, char *wadFileName )
+{
+    FUNCTION_ENTRY ( NULL, "getInputFiles", true );
+
     char *listNames = wadFileName;
     wadList *myList = new wadList;
 
@@ -164,6 +217,8 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
     char temp [ 256 ];
     strcpy ( temp, cmdLine );
     char *ptr = strtok ( temp, "+" );
+
+    int errors = 0;
 
     while ( ptr && *ptr ) {
         char wadName [ 256 ];
@@ -183,61 +238,78 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
             delete wad;
         } else {
             if ( ! myList->IsEmpty ()) {
-                printf ( "Merging: %s with %s\n", wadName, listNames );
+                cprintf ( "Merging: %s with %s\r\n", wadName, listNames );
                 *wadFileName++ = '+';
             }
-            myList->Add ( wad );
-            char *end = wadName + strlen ( wadName ) - 1;
-            while (( end > wadName ) && ( *end != '\\' )) end--;
-            if ( *end == '\\' ) end++;
-            wadFileName += sprintf ( wadFileName, "%s", end );
+            if ( myList->Add ( wad ) == false ) {
+                errors++;
+                if ( myList->Type () != wt_UNKNOWN ) {
+                    fprintf ( stderr, "ERROR: %s is not a %s PWAD.\n", wadName, TypeName ( myList->Type ()));
+                } else {
+                    fprintf ( stderr, "ERROR: %s is not the same type.\n", wadName );
+                }
+                delete wad;
+            } else {
+                char *end = wadName + strlen ( wadName ) - 1;
+                while (( end > wadName ) && ( *end != SEPERATOR )) end--;
+                if ( *end == SEPERATOR ) end++;
+                wadFileName += sprintf ( wadFileName, "%s", end );
+            }
         }
         ptr = strtok ( NULL, "+" );
     }
-    if ( myList->wadCount () > 1 ) printf ( "\n" );
+
+    if ( wadFileName [-1] == '+' ) wadFileName [-1] = '\0';
+    if ( myList->wadCount () > 1 ) cprintf ( "\r\n" );
+    if ( errors ) fprintf ( stderr, "\n" );
 
     return myList;
 }
 
 const wNode *nodes;
 int totalDepth;
-int noLeafs;
 
 int Traverse ( int index, int depth, int &diagonals, int &balance, int &lChildren, int &rChildren )
 {
+    FUNCTION_ENTRY ( NULL, "Traverse", false );
+
     const wNode *node = &nodes [ index ];
-    if (( node->dx != 0 ) && ( node->dy != 0 )) diagonals++;
+
     if ( flags.Tree ) printf ( "(%5d,%5d)  [%5d,%5d]\n", node->x, node->y, node->dx, node->dy );
 
-    depth++;
-    int lDepth = 0, rDepth = 0;
+    if (( node->dx != 0 ) && ( node->dy != 0 )) diagonals++;
 
     int lIndex = node->child [0];
     int rIndex = node->child [1];
 
     if (( lIndex & 0x8000 ) == ( rIndex & 0x8000 )) balance++;
 
-    if (( lIndex & 0x8000 ) && ( rIndex & 0x8000 )) {
-        totalDepth += depth;
-        noLeafs++;
-        return depth;
-    }
+    int lDepth = 0, rDepth = 0;
+
+    depth++;
 
     if ( flags.Tree ) printf ( "%5d %*.*sLeft - ", depth, depth*2, depth*2, "" );
+
     if (( lIndex & 0x8000 ) == 0 ) {
         int left = 0, right = 0;
-        lDepth = Traverse ( lIndex, depth, diagonals, balance, left, right );
+        lDepth    = Traverse ( lIndex, depth, diagonals, balance, left, right );
         lChildren = 1 + left + right;
-    } else
+    } else {
         if ( flags.Tree ) printf ( "** NONE **\n" );
+        lDepth      = depth;
+        totalDepth += depth + 1;
+    }
 
     if ( flags.Tree ) printf ( "%5d %*.*sRight - ", depth, depth*2, depth*2, "" );
+
     if (( rIndex & 0x8000 ) == 0 ) {
         int left = 0, right = 0;
-        rDepth = Traverse ( rIndex, depth, diagonals, balance, left, right );
+        rDepth    = Traverse ( rIndex, depth, diagonals, balance, left, right );
         rChildren = 1 + left + right;
     } else {
         if ( flags.Tree ) printf ( "** NONE **\n" );
+        rDepth      = depth;
+        totalDepth += depth + 1;
     }
 
     return (( lDepth > rDepth ) ? lDepth : rDepth );
@@ -245,13 +317,14 @@ int Traverse ( int index, int depth, int &diagonals, int &balance, int &lChildre
 
 void AnalyzeBSP ( DoomLevel *curLevel )
 {
-    if ( curLevel->NodeCount () < 2 ) {
-        printf ( "******** INVALID BSP TREE ********" );
+    FUNCTION_ENTRY ( NULL, "AnalyzeBSP", true );
+
+    if ( curLevel->IsValid ( true, true ) == false ) {
+        printf ( "******** Invalid level ********" );
         return;
     }
 
     totalDepth = 0;
-    noLeafs = 0;
 
     nodes = curLevel->GetNodes ();
     int balance = 0, diagonals = 0;
@@ -262,53 +335,59 @@ void AnalyzeBSP ( DoomLevel *curLevel )
     int depth = Traverse ( curLevel->NodeCount () - 1, 0, diagonals, balance, left, right );
 
     const wSegs *seg = curLevel->GetSegs ();
-////    const wVertex *vertices = curLevel->GetVertices ();
     const wLineDef *lineDef = curLevel->GetLineDefs ();
 
     bool *lineUsed = new bool [ curLevel->LineDefCount ()];
     memset ( lineUsed, false, sizeof ( bool ) * curLevel->LineDefCount ());
-    int i;
-    for ( i = 0; i < curLevel->SegCount (); i++, seg++ ) {
+    for ( int i = 0; i < curLevel->SegCount (); i++, seg++ ) {
         lineUsed [ seg->lineDef ] = true;
     }
 
-////    int totalDiagonals = 0;
-////    int lineDefs = 0;
     int sideDefs = 0;
-    for ( i = 0; i < curLevel->LineDefCount (); i++ ) {
+    for ( int i = 0; i < curLevel->LineDefCount (); i++ ) {
         if ( lineUsed [i] == false ) continue;
-////        lineDefs++;
-////        const wVertex *vertS = &vertices [ lineDef[i].start ];
-////        const wVertex *vertE = &vertices [ lineDef[i].end ];
-////        if (( vertS->x != vertE->x ) && ( vertS->y != vertE->y ))
-////            totalDiagonals++;
         if ( lineDef[i].sideDef[0] != NO_SIDEDEF ) sideDefs++;
         if ( lineDef[i].sideDef[1] != NO_SIDEDEF ) sideDefs++;
     }
 
     int splits = curLevel->SegCount () - sideDefs;
 
+    int noLeafs  = curLevel->SubSectorCount ();
+    int optDepth = ( int ) ceil ( log (( float ) noLeafs ) / log ( 2.0 ));
+    int maxLeafs = ( int ) pow ( 2, optDepth );
+    int minDepth = noLeafs * ( optDepth + 1 ) - maxLeafs;
+    int maxDepth = noLeafs * (( noLeafs - 1 ) / 2 + 1 ) - 1;
+
+    double minScore = ( double ) minDepth / ( double ) maxDepth;
+    double score = ( double ) minDepth / ( double ) totalDepth;
+    score = ( score - minScore ) / ( 1 - minScore );
+
     if ( ! flags.Tree ) {
         float avgDepth = noLeafs ? ( float ) totalDepth / ( float ) noLeafs : 0;
-        printf ( "%2d (%4.1f)  ", depth, avgDepth );
-        printf ( "%5.3f ", ( float ) balance / curLevel->NodeCount ());
-        printf ( "%5.1f/%-5.1f", 100.0 * left / ( curLevel->NodeCount () - 1 ),
-                                 100.0 * right / ( curLevel->NodeCount () - 1 ));
-        printf ( "%5d - %4.1f%%", splits, 100.0 * splits / sideDefs );
-        printf ( "%5d - %4.1f%%", diagonals, 100.0 * diagonals / curLevel->NodeCount ());
-////        printf ( "%5d - %4.1f%%", diagonals, 100.0 * diagonals / totalDiagonals );
-        printf ( "%5d  ", curLevel->NodeCount ());
+        printf ( "%2d  ", depth );
+        printf ( "%4.1f   ", avgDepth );
+        printf ( "%5.3f   ", score );
+        printf ( "%5.3f ", ( left < right ) ? ( double ) left / ( double ) right : ( double ) right / ( double ) left );
+        printf ( "%5d - %4.1f%% ", splits, 100.0 * splits / sideDefs );
+        printf ( "%5d - %4.1f%% ", diagonals, 100.0 * diagonals / curLevel->NodeCount ());
+        printf ( "%5d ", curLevel->NodeCount ());
         printf ( "%5d", curLevel->SegCount ());
     }
 }
 
-int main ( int argc, char *argv[] )
+int main ( int argc, const char *argv[] )
 {
-    fprintf ( stderr, "BSPInfo Version %s (c) 1995 Marc Rousseau\n\n", VERSION );
+    FUNCTION_ENTRY ( NULL, "main", true );
+
+    SaveConsoleSettings ();
+
+    cprintf ( "%s\r\n\r\n", BANNER );
+    if ( ! isatty ( fileno ( stdout ))) fprintf ( stdout, "%s\n\n", BANNER );
+    if ( ! isatty ( fileno ( stderr ))) fprintf ( stderr, "%s\n\n", BANNER );
 
     if ( argc == 1 ) {
         printHelp ();
-        return 0;
+        return -1;
     }
 
     flags.Tree = false;
@@ -333,7 +412,8 @@ int main ( int argc, char *argv[] )
         }
 
         if ( ! flags.Tree ) {
-            printf ( "         Depth (Avg)   FOM    Balance      Splits      Diagonals  Nodes  Segs\n" );
+            printf ( "          Max   Avg\n" );
+            printf ( "         Depth Depth   FOM   Balance    Splits       Diagonals  Nodes  Segs\n" );
         }
 
         int noLevels = 0;

@@ -6,7 +6,7 @@
 //
 // Description: Definitions of structures used by the ZenNode routines
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -28,10 +28,10 @@
 //
 //----------------------------------------------------------------------------
 
-#ifndef _ZENNODE_HPP_
-#define _ZENNODE_HPP_
+#ifndef ZENNODE_HPP_
+#define ZENNODE_HPP_
 
-#if ! defined ( _LEVEL_HPP_ )
+#if ! defined ( LEVEL_HPP_ )
   #include "level.hpp"
 #endif
 
@@ -48,20 +48,13 @@ struct sNodeOptions {
     bool  ReduceLineDefs;
 };
 
-struct sRejectOptions {
-    bool  Rebuild;
-    bool  Empty;
-    bool  Force;
-    bool  FindChildren;
-    bool  UseGraphs;
-};
-
 typedef unsigned short BAM;
 typedef long double REAL;	// Must have at least 50 significant bits
 
 struct sVertex {
     double x;
     double y;
+    double l;
 };
 
 struct SEG {
@@ -88,17 +81,13 @@ struct sBSPOptions {
 
 struct sScoreInfo {
     int       index;
-    int       metric1;
-    int       metric2;
+    long      metric1;
+    long      metric2;
     int       invalid;
     int       total;
 };
 
 #define sgn(a)		((0<(a))-((a)<0))
-
-#if defined ( _MSC_VER )
-    #define hypot _hypot
-#endif
 
 #define BAM90		(( BAM ) 0x4000 )	// BAM:  90ψ ( «γ)
 #define BAM180		(( BAM ) 0x8000 )	// BAM: 180ψ ( ργ)
@@ -120,10 +109,73 @@ struct sScoreInfo {
 #define IS_LEFT_RIGHT(s)	( s & 1 )
 #define FLIP(c,s)		( c ^ s )
 
+// ---- ZenReject structures to support RMB options ----
+
+enum REJECT_OPTION_E {
+    OPTION_UNKNOWN,
+    OPTION_MAP_1,
+    OPTION_MAP_2,
+    OPTION_BAND,
+    OPTION_BLIND,
+    OPTION_BLOCK,
+    OPTION_DISTANCE,
+    OPTION_DOOR,
+    OPTION_EXCLUDE,
+    OPTION_GROUP,
+    OPTION_INCLUDE,
+    OPTION_LEFT,
+    OPTION_LENGTH,
+    OPTION_LINE,
+    OPTION_NODOOR,
+    OPTION_NOMAP,
+    OPTION_NOPROCESS,
+    OPTION_ONE,
+    OPTION_PERFECT,
+    OPTION_PREPROCESS,
+    OPTION_PROCESS,
+    OPTION_REPORT,
+    OPTION_RIGHT,
+    OPTION_SAFE,
+    OPTION_TRACE
+};
+
+struct sRejectOptionRMB;
+struct sOptionTableInfo;
+
+typedef bool (*PARSE_FUNCTION) ( char *, const sOptionTableInfo &, sRejectOptionRMB * );
+
+struct sOptionTableInfo {
+    const char              *Name;
+    const char              *Syntax;
+    REJECT_OPTION_E          Type;
+    PARSE_FUNCTION           ParseFunction;
+};
+
+struct sRejectOptionRMB {
+    const sOptionTableInfo  *Info;
+    bool                     Inverted;
+    bool                     Banded;
+    int                      Data [2];
+    int                     *List [2];
+};
+
+struct sRejectOptions {
+    bool                     Rebuild;
+    bool                     Empty;
+    bool                     Force;
+    bool                     FindChildren;
+    bool                     UseGraphs;
+    bool                     UseRMB;
+    const sRejectOptionRMB  *rmb;
+};
+
+bool ParseOptionRMB ( int, const char *, sRejectOptionRMB * );
 
 // ----- C99 routines from <math.h> Required by ZenNode -----
 
-#if defined ( __GNUC__ ) && ( __GNUC__ < 3 )
+#if ( defined ( __GNUC__ ) && ( __GNUC__ < 3 )) || defined ( __INTEL_COMPILER ) || defined ( __BORLANDC__ )
+
+#if defined ( X86 )
 
     __inline long lrint ( double flt )
     {
@@ -133,6 +185,15 @@ struct sScoreInfo {
 
         return intgr;
     }
+
+#else
+    __inline long lrint ( double flt )
+    {
+      //        return ( long ) ( flt + 0.5 * sgn ( flt ));
+        return ( long ) ( flt + 0.5 );
+    }
+
+#endif
 
 #elif defined ( _MSC_VER )
 
@@ -151,19 +212,8 @@ struct sScoreInfo {
 
 #endif
 
-
 extern void CreateNODES ( DoomLevel *level, sBSPOptions *options );
 extern int  CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options );
-extern bool CreateREJECT ( DoomLevel *level, const sRejectOptions &options, ULONG *efficiency );
-
-
-// ----- External Functions Required by ZenNode -----
-
-extern void Status ( char * );
-extern void GoRight ();
-extern void GoLeft ();
-extern void Backup ();
-extern void ShowProgress ();
-extern void ShowDone ();
+extern bool CreateREJECT ( DoomLevel *level, const sRejectOptions &options );
 
 #endif

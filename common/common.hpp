@@ -6,7 +6,7 @@
 //
 // Description:
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -26,8 +26,8 @@
 //
 //----------------------------------------------------------------------------
 
-#ifndef _COMMON_HPP_
-#define _COMMON_HPP_
+#ifndef COMMON_HPP_
+#define COMMON_HPP_
 
 //----------------------------------------------------------------------------
 // Generic definitions
@@ -37,50 +37,51 @@
     #undef UNREFERENCED_PARAMETER
 #endif
 
-#define UNREFERENCED_PARAMETER(x)	x
+#if defined ( _MSC_VER )
+    #define UNREFERENCED_PARAMETER(x)	x
+#else
+    #define UNREFERENCED_PARAMETER(x)
+#endif
 
 #define OFFSET_OF(t,x)	(( size_t ) & (( t * ) 0 )->( x ))
 #define SIZE(x)		( sizeof ( x ) / sizeof (( x )[0] ))
 #define EVER		;;
 
-typedef unsigned char  UCHAR;
-typedef unsigned short USHORT;
-typedef unsigned long  ULONG;
+typedef signed char  INT8;
+typedef signed short INT16;
+typedef signed int   INT32;
+
+typedef unsigned char  UINT8, UCHAR;
+typedef unsigned short UINT16;
+typedef unsigned int   UINT32;
 
 #if defined ( __GNUC__ )
 
-    typedef unsigned char  BYTE;
-    typedef unsigned short WORD;
-    typedef unsigned long  DWORD;
-    typedef long long      LLONG;
+    typedef long long          INT64;
+    typedef unsigned long long UINT64;
 
 #else
 
-    typedef __int64        LLONG;
+    typedef __int64            INT64;
+    typedef unsigned __int64   UINT64;
 
 #endif
 
-#if defined ( __BYTE_ORDER )
+#if defined ( __WIN32__ ) || defined ( __AMIGAOS__ )
 
     // Undo any previos definitions
-    #undef LITTLE_ENDIAN
-    #undef BIG_ENDIAN
+    #define BIG_ENDIAN      1234
+    #define LITTLE_ENDIAN   4321
 
-    #if __BYTE_ORDER == __LITTLE_ENDIAN
-        #define LITTLE_ENDIAN
-    #endif
-    #if __BYTE_ORDER == __BIG_ENDIAN
-        #define BIG_ENDIAN
-    #endif
+    #define BYTE_ORDER      LITTLE_ENDIAN
 
-#endif
+#else
 
-#if ! defined ( LITTLE_ENDIAN ) && ! defined ( BIG_ENDIAN )
-    #define LITTLE_ENDIAN
-#endif
+    // Use the environments endian definitions
+    #undef  __USE_BSD
+    #define __USE_BSD
+    #include <endian.h>
 
-#if defined ( LITTLE_ENDIAN ) && defined ( BIG_ENDIAN )
-    #undef BIG_ENDIAN
 #endif
 
 typedef int (*QSORT_FUNC) ( const void *, const void * );
@@ -92,12 +93,28 @@ typedef int (*QSORT_FUNC) ( const void *, const void * );
     #undef min
 #endif
 
-template < class T > inline void Swap ( T &item1, T &item2 )
+template < class T > inline void swap ( T &item1, T &item2 )
 {
     T temp = item1;
     item1 = item2;
     item2 = temp;
 }
+
+//----------------------------------------------------------------------------
+// Platform specific definitions
+//----------------------------------------------------------------------------
+
+#if defined ( __OS2__ ) || defined ( __WIN32__ )
+
+#define SEPERATOR	'\\'
+#define DEFAULT_CHAR	'û'
+
+#elif defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
+
+#define SEPERATOR	'/'
+#define DEFAULT_CHAR	'*'
+
+#endif
 
 //----------------------------------------------------------------------------
 // Compiler specific definitions
@@ -125,6 +142,16 @@ template < class T > inline void Swap ( T &item1, T &item2 )
 
     #endif
 
+    template <class T> inline const T &min ( const T &t1, const T &t2 )
+    {
+        return ( t1 > t2 ) ? t2 : t1;
+    }
+
+    template <class T> inline const T &max ( const T &t1, const T &t2 )
+    {
+        return ( t1 > t2 ) ? t1 : t2;
+    }
+
 #elif defined ( _MSC_VER )
 
     #undef  NULL
@@ -136,27 +163,48 @@ template < class T > inline void Swap ( T &item1, T &item2 )
     #define MAXFNAME	_MAX_FNAME
     #define MAXEXT	_MAX_EXT
 
-    // Fake out ANSI definitions for deficient compilers
-    #define for    if (0); else for
+    #if ( _MSC_VER < 1300 )
 
+        // Fake out ANSI definitions for deficient compilers
+        #define for    if (0); else for
+
+        #pragma warning ( disable: 4127 )    // C4127: conditional expression is constant
+
+    #endif
+
+    #pragma warning ( disable: 4244 )    // C4244: 'xyz' conversion from 'xxx' to 'yyy', possible loss of data
+    #pragma warning( disable : 4290 )    // C4290: C++ exception specification ignored...
     #pragma warning ( disable: 4514 )    // C4514: 'xyz' unreferenced inline function has been removed
-    #pragma warning ( disable: 4127 )    // C4127: conditional expression is constant - for the 'for' fakeout
+
+    template <class T> inline const T &min ( const T &t1, const T &t2 )
+    {
+        return ( t1 > t2 ) ? t2 : t1;
+    }
+
+    template <class T> inline const T &max ( const T &t1, const T &t2 )
+    {
+        return ( t1 > t2 ) ? t1 : t2;
+    }
+
+    #if ( _MSC_VER >= 1300 )
+        extern char *strndup ( const char *string, size_t max );
+    #endif
 
 #elif defined ( __WATCOMC__ )
 
     #define M_PI        3.14159265358979323846
 
-    template <class T> inline const T& min( const T& t1, const T& t2 )
+    template <class T> inline const T &min ( const T &t1, const T &t2 )
     {
         return ( t1 > t2 ) ? t2 : t1;
     }
 
-    template <class T> inline const T& max( const T& t1, const T& t2 )
+    template <class T> inline const T &max ( const T &t1, const T &t2 )
     {
         return ( t1 > t2 ) ? t1 : t2;
     }
 
-#elif defined ( __GNUC__ )
+#elif defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
 
     #define MAXPATH	FILENAME_MAX
     #define MAXDRIVE	FILENAME_MAX
@@ -168,6 +216,42 @@ template < class T > inline void Swap ( T &item1, T &item2 )
 
     #define stricmp strcasecmp
     #define strnicmp strncasecmp
+
+        template <class T> inline const T &min ( const T &t1, const T &t2 )
+        {
+            return ( t1 > t2 ) ? t2 : t1;
+        }
+
+        template <class T> inline const T &max ( const T &t1, const T &t2 )
+        {
+            return ( t1 > t2 ) ? t1 : t2;
+        }
+
+#elif defined ( __AMIGAOS__ )
+
+    // Fake out ANSI definitions for deficient compilers
+    #define for    if (0); else for
+
+    enum { false, true };
+    class bool {
+        int   value;
+    public:
+        operator = ( int x ) { value = x ? true : false; }
+        bool operator ! ()   { return value; }
+    };
+
+    template <class T> inline const T &min ( const T &t1, const T &t2 )
+    {
+        return ( t1 > t2 ) ? t2 : t1;
+    }
+
+    template <class T> inline const T &max ( const T &t1, const T &t2 )
+    {
+        return ( t1 > t2 ) ? t1 : t2;
+    }
+
+    extern char *strdup ( const char *string );
+    extern char *strndup ( const char *string, size_t max );
 
 #endif
 

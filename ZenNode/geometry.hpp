@@ -6,7 +6,7 @@
 //
 // Description:
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -26,10 +26,10 @@
 //
 //----------------------------------------------------------------------------
 
-#if ! defined ( _GEOMETRY_HPP_ )
-#define _GEOMETRY_HPP_
+#ifndef GEOMETRY_HPP_
+#define GEOMETRY_HPP_
 
-#if ! defined ( _COMMON_HPP_ )
+#if ! defined ( COMMON_HPP_ )
     #include "common.hpp"
 #endif
 

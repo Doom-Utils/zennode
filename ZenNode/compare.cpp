@@ -6,7 +6,7 @@
 //
 // Description: Compares two REJECT structures and report any differences
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1996-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -36,23 +36,31 @@
     #define INCL_SUB
     #include <conio.h>
     #include <dos.h>
+    #include <io.h>
     #include <os2.h>
 #elif defined ( __WIN32__ )
     #include <conio.h>
     #include <dos.h>
+    #include <io.h>
     #include <windows.h>
     #include <wincon.h>
-#elif defined ( __GNUC__ )
+#elif defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
+    #include <unistd.h>
 #else
     #error This program must be compiled as a 32-bit app.
 #endif
 
 #include "common.hpp"
+#include "logger.hpp"
 #include "wad.hpp"
 #include "level.hpp"
+#include "console.hpp"
 
-#define VERSION		"1.02"
-#define MAX_LEVELS	50
+DBG_REGISTER ( __FILE__ );
+
+#define VERSION		"1.3"
+#define BANNER          "compare Version " VERSION " (c) 1996-2004 Marc Rousseau"
+#define MAX_LEVELS	99
 
 #define UNSUPPORTED_FEATURE	-1
 #define UNRECOGNIZED_PARAMETER	-2
@@ -61,108 +69,71 @@
     #pragma option -x -xf
 #endif
 
-extern ULONG startX, startY;
-
-void SaveConsoleSettings ();
-void RestoreConsoleSettings ();
-void HideCursor ();
-void ShowCursor ();
-int GetKey ();
-bool KeyPressed ();
-
-#if defined ( __OS2__ )
-
-#define SEPERATOR	'\\'
-#define DEFAULT_CHAR	'û'
-
-#elif defined ( __WIN32__ )
-
-#define SEPERATOR	'\\'
-#define DEFAULT_CHAR	'û'
-
-#elif defined ( __GNUC__ )
-
-#define SEPERATOR	'/'
-#define DEFAULT_CHAR	'*'
+#if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
 
 #define stricmp strcasecmp
-#define cprintf printf
 
 extern char *strupr ( char *ptr );
 
 #endif
-
-void GetXY ( ULONG *x, ULONG *y );
-void GotoXY ( ULONG x, ULONG y );
-ULONG CurrentTime ();
-void Status ( char *message );
-void GoRight ();
-void GoLeft ();
-void Backup ();
-void ShowDone ();
-void ShowProgress ();
-void MoveUp ( int delta );
-void MoveDown ( int delta );
 
 void printHelp ()
 {
-    fprintf ( stderr, "Usage: compare {/options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
+    FUNCTION_ENTRY ( NULL, "printHelp", true );
+
+    fprintf ( stderr, "Usage: compare {-options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
     fprintf ( stderr, "\n" );
-    fprintf ( stderr, "     /x+ turn on option   /x- turn off option  û = default\n" );
+    fprintf ( stderr, "     -x+ turn on option   -x- turn off option  %c = default\n", DEFAULT_CHAR );
     fprintf ( stderr, "\n" );
     fprintf ( stderr, "     level - ExMy for DOOM / Heretic\n" );
     fprintf ( stderr, "             MAPxx for DOOM II / HEXEN\n" );
 }
 
-int parseArgs ( int index, char *argv[] )
+int parseArgs ( int index, const char *argv[] )
 {
+    FUNCTION_ENTRY ( NULL, "parseArgs", true );
+
     bool errors = false;
     while ( argv [ index ] ) {
 
-        if ( argv [index][0] != '/' ) break;
-/*
+        if ( argv [index][0] != '-' ) break;
+
         char *localCopy = strdup ( argv [ index ]);
-        char *basePtr = localCopy + 1;
+        char *ptr = localCopy + 1;
         strupr ( localCopy );
 
-        basePtr = strtok ( basePtr, "/" );
-        while ( basePtr ) {
-            char *ptr;
-            try {
-                ptr = basePtr;
-                while ( *ptr ) {
-                    int option = *ptr++;
-                    bool setting = true;
-                    if (( *ptr == '+' ) || ( *ptr == '-' )) {
-                        setting = ( *ptr++ == '-' ) ? false : true;
-                    }
-                    switch ( option ) {
-                        default  : throw UNRECOGNIZED_PARAMETER;
-                    }
-                }
+        bool localError = false;
+        while ( *ptr && ( localError == false )) {
+            int option = *ptr++;
+            bool setting = true;
+            if (( *ptr == '+' ) || ( *ptr == '-' )) {
+                setting = ( *ptr == '-' ) ? false : true;
+                ptr++;
             }
-            catch ( int x ) {
-                errors = true;
-                int offset = basePtr - localCopy - 1;
-                int width = strlen ( basePtr ) + 1;
-                switch ( x ) {
-                    case UNSUPPORTED_FEATURE :
-                    case UNRECOGNIZED_PARAMETER :
-                        fprintf ( stderr, "Unrecognized parameter '%*.*s'\n", width, width, argv [index] + offset );
-                        break;
-                }
+            switch ( option ) {
+                case -1 :
+                default : localError = true;
             }
-            basePtr = strtok ( NULL, "/" );
         }
-*/
+        if ( localError ) {
+            errors = true;
+            int offset = ptr - localCopy - 1;
+            size_t width = strlen ( ptr ) + 1;
+            fprintf ( stderr, "Unrecognized parameter '%*.*s'\n", width, width, argv [index] + offset );
+        }
+        free ( localCopy );
         index++;
     }
+
     if ( errors ) fprintf ( stderr, "\n" );
+
     return index;
 }
 
-int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadList *list1, wadList *list2 )
+int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], wadList *list1, wadList *list2 )
 {
+    FUNCTION_ENTRY ( NULL, "getLevels", true );
+
     int index = 0, errors = 0;
 
     char buffer [128];
@@ -219,28 +190,40 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
 
 void EnsureExtension ( char *fileName, const char *ext )
 {
-    int length = strlen ( fileName );
-    char *ptr = strrchr ( fileName, '.' );
-    if (( ptr && strchr ( ptr, '\\' )) ||
-        ( ! ptr && stricmp ( &fileName[length-4], ext ))) {
+    FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
+
+    // See if the file exists first
+    FILE *file = fopen ( fileName, "rb" );
+    if ( file != NULL ) {
+        fclose ( file );
+        return;
+    }
+
+    size_t length = strlen ( fileName );
+    if ( stricmp ( &fileName [length-4], ext ) != 0 ) {
         strcat ( fileName, ext );
     }
 }
 
 const char *TypeName ( eWadType type )
 {
+    FUNCTION_ENTRY ( NULL, "TypeName", true );
+
+    const char *name = NULL;
     switch ( type ) {
-        case wt_DOOM    : return "DOOM";
-        case wt_DOOM2   : return "DOOM2";
-        case wt_HERETIC : return "Heretic";
-        case wt_HEXEN   : return "Hexen";
-        default         : break;
+        case wt_DOOM    : name = "DOOM";	break;
+        case wt_DOOM2   : name = "DOOM2";	break;
+        case wt_HERETIC : name = "Heretic";	break;
+        case wt_HEXEN   : name = "Hexen";	break;
+        default         : name = "<Unknown>";	break;
     }
-    return "<Unknown>";
+    return name;
 }
 
-wadList *getInputFiles ( char *cmdLine, char *wadFileName )
+wadList *getInputFiles ( const char *cmdLine, char *wadFileName )
 {
+    FUNCTION_ENTRY ( NULL, "getInputFiles", true );
+
     char *listNames = wadFileName;
     wadList *myList = new wadList;
 
@@ -251,6 +234,7 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
     char *ptr = strtok ( temp, "+" );
 
     int errors = 0;
+
     while ( ptr && *ptr ) {
         char wadName [ 256 ];
         strcpy ( wadName, ptr );
@@ -282,13 +266,14 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
                 delete wad;
             } else {
                 char *end = wadName + strlen ( wadName ) - 1;
-                while (( end > wadName ) && ( *end != '\\' )) end--;
-                if ( *end == '\\' ) end++;
+                while (( end > wadName ) && ( *end != SEPERATOR )) end--;
+                if ( *end == SEPERATOR ) end++;
                 wadFileName += sprintf ( wadFileName, "%s", end );
             }
         }
         ptr = strtok ( NULL, "+" );
     }
+
     if ( wadFileName [-1] == '+' ) wadFileName [-1] = '\0';
     if ( myList->wadCount () > 1 ) cprintf ( "\r\n" );
     if ( errors ) fprintf ( stderr, "\n" );
@@ -296,30 +281,10 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
     return myList;
 }
 
-/*
-long CompareREJECT ( DoomLevel *curLevel, UCHAR *oldPtr, long &vis, long &hid )
-{
-    int size = curLevel->RejectSize ();
-    int noSectors = curLevel->SectorCount ();
-    int mask = ( 0xFF00 >> ( size * 8 - noSectors * noSectors )) & 0xFF;
-    UCHAR *newPtr = ( UCHAR * ) curLevel->GetReject ();
-    long count = 0, newVal, tempVal;
-    hid = 0;
-    while ( size-- ) {
-        newVal = *newPtr++;
-        tempVal = newVal ^ *oldPtr++;
-        count += HammingTable [ tempVal ];
-        hid   += HammingTable [ newVal &= tempVal ];
-    }
-    count -= HammingTable [ tempVal & mask ];
-    hid   -= HammingTable [ newVal & mask ];
-    vis = count - hid;
-    return count;
-}
-*/
-
 int CompareREJECT ( DoomLevel *srcLevel, DoomLevel *tgtLevel )
 {
+    FUNCTION_ENTRY ( NULL, "CompareREJECT", true );
+
     bool match = true;
     int noSectors = srcLevel->SectorCount ();
     char *srcPtr = ( char * ) srcLevel->GetReject ();
@@ -407,14 +372,24 @@ int CompareREJECT ( DoomLevel *srcLevel, DoomLevel *tgtLevel )
 
     if ( match == true ) printf ( "Perfect Match\n" );
 
+    for ( int i = 0; i < noSectors; i++ ) {
+        delete [] vis2hid [i];
+        delete [] hid2vis [i];
+    }
+
     delete [] vis2hid;
     delete [] hid2vis;
+
+    delete [] v2hCount;
+    delete [] h2vCount;
 
     return match ? 0 : 1;
 }
 
 int ProcessLevel ( char *name, wadList *myList1, wadList *myList2 )
 {
+    FUNCTION_ENTRY ( NULL, "ProcessLevel", true );
+
     int change;
     cprintf ( "  %-*.*s: ", MAX_LUMP_NAME, MAX_LUMP_NAME, name );
     GetXY ( &startX, &startY );
@@ -422,22 +397,22 @@ int ProcessLevel ( char *name, wadList *myList1, wadList *myList2 )
     DoomLevel *tgtLevel = NULL;
     const wadListDirEntry *dir = myList1->FindWAD ( name );
     DoomLevel *srcLevel = new DoomLevel ( name, dir->wad );
-    if ( srcLevel->isValid ( true ) == false ) {
+    if ( srcLevel->IsValid ( true ) == false ) {
         change = -1000;
-        Status ( "This level is not valid... " );
+        cprintf ( "The source level is not valid... \r\n" );
         goto done;
     }
 
     dir = myList2->FindWAD ( name );
     tgtLevel = new DoomLevel ( name, dir->wad );
-    if ( tgtLevel->isValid ( true ) == false ) {
+    if ( tgtLevel->IsValid ( true ) == false ) {
         change = -1000;
-        Status ( "This level is not valid... " );
+        cprintf ( "The target level is not valid... \r\n" );
         goto done;
     }
     if ( srcLevel->RejectSize () != tgtLevel->RejectSize ()) {
         change = -1000;
-        Status ( "The reject maps aren't the same size" );
+        cprintf ( "The reject maps aren't the same size\r\n" );
         goto done;
     }
 
@@ -455,16 +430,21 @@ done:
     #include <dir.h>
 #endif
 
-int main ( int argc, char *argv[] )
+int main ( int argc, const char *argv[] )
 {
-    fprintf ( stderr, "Compare Version %s (c) 1996 Marc Rousseau\n\n", VERSION );
+    FUNCTION_ENTRY ( NULL, "main", true );
+ 
+    SaveConsoleSettings ();
+    HideCursor ();
+
+    cprintf ( "%s\r\n\r\n", BANNER );
+    if ( ! isatty ( fileno ( stdout ))) fprintf ( stdout, "%s\n\n", BANNER );
+    if ( ! isatty ( fileno ( stderr ))) fprintf ( stderr, "%s\n\n", BANNER );
 
     if ( argc == 1 ) {
         printHelp ();
         return -1;
     }
-
-    SaveConsoleSettings ();
 
     int argIndex = 1, changes = 0;
 
@@ -505,6 +485,8 @@ int main ( int argc, char *argv[] )
         delete myList2;
 
     } while ( argv [argIndex] );
+
+    cprintf ( "\r\n" );
 
     RestoreConsoleSettings ();
 

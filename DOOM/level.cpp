@@ -6,7 +6,7 @@
 //
 // Description: Object classes for manipulating Doom Maps
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -31,12 +31,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common.hpp"
+#include "logger.hpp"
 #include "level.hpp"
 #include "wad.hpp"
 
-#define min(x,y)    ((( x ) < ( y )) ? x : y )
+DBG_REGISTER ( __FILE__ );
 
-#if defined ( __GNUC__ )
+#define SWAP_ENDIAN_16(x)   (((( x ) & 0xFF ) << 8 ) | ((( x ) >> 8 ) & 0xFF ))
+
+//#define min(x,y)    ((( x ) < ( y )) ? x : y )
+
+#if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
 
 char *strupr ( char *ptr )
 {
@@ -48,62 +53,50 @@ char *strupr ( char *ptr )
 
 #endif
 
+DoomLevel::sLevelLump::sLevelLump () :
+    changed ( false ),
+    byteOrder ( BYTE_ORDER ),
+    elementSize ( 0 ),
+    elementCount ( 0 ),
+    dataSize ( 0 ),
+    rawData ( NULL )
+{
+}
+
 DoomLevel::DoomLevel ( const char *_name, WAD *_wad, bool bLoadData ) :
     m_Wad ( _wad ),
-    m_Modified ( false ),
-    m_Valid ( false ),
-    m_Checked ( false ),
-    m_NewFormat ( false ),
+    m_IsHexen ( false ),
     m_Title ( NULL ),
     m_Music ( NULL ),
     m_Cluster ( 0 ),
-    m_MapDataSize ( 0 ),
-    m_NoThings ( 0 ),
-    m_NoLineDefs ( 0 ),
-    m_NoSideDefs ( 0 ),
-    m_NoVertices ( 0 ),
-    m_NoSectors ( 0 ),
-    m_NoSegs ( 0 ),
-    m_NoSubSectors ( 0 ),
-    m_NoNodes ( 0 ),
-    m_RejectSize ( 0 ),
-    m_BlockMapSize ( 0 ),
-    m_RawThing ( NULL ),
-    m_RawLineDef ( NULL ),
-    m_ThingsChanged ( false ),
-    m_LineDefsChanged ( false ),
-    m_SideDefsChanged ( false ),
-    m_VerticesChanged ( false ),
-    m_SectorsChanged ( false ),
-    m_SegsChanged ( false ),
-    m_SubSectorsChanged ( false ),
-    m_NodesChanged ( false ),
-    m_RejectChanged ( false ),
-    m_BlockMapChanged ( false ),
-    m_MapData ( NULL ),
-    m_Thing ( NULL ),
-    m_LineDef ( NULL ),
-    m_SideDef ( NULL ),
-    m_Vertex ( NULL ),
-    m_Sector ( NULL ),
-    m_Segs ( NULL ),
-    m_SubSector ( NULL ),
-    m_Node ( NULL ),
-    m_Reject ( NULL ),
-    m_BlockMap ( NULL )
+    m_ThingData ( NULL ),
+    m_LineDefData ( NULL )
 {
-    WipeOut ();
+    FUNCTION_ENTRY ( this, "DoomLevel ctor", true );
 
     m_Title     = NULL;
     m_Music     = NULL;
     m_Cluster   = -1;
-    m_NewFormat = false;
+    m_IsHexen = false;
 
     memset ( m_Name, 0, sizeof ( m_Name ));
     for ( int i = 0; i < 8; i++ ) {
         if ( _name[i] == '\0' ) break;
         m_Name[i] = ( char ) toupper ( _name[i] );
     }
+
+    m_Map.elementSize       = 1;
+    m_Thing.elementSize     = 1;
+    m_LineDef.elementSize   = 1;
+    m_SideDef.elementSize   = sizeof ( wSideDef );
+    m_Vertex.elementSize    = sizeof ( wVertex );
+    m_Sector.elementSize    = sizeof ( wSector );
+    m_Segs.elementSize      = sizeof ( wSegs );
+    m_SubSector.elementSize = sizeof ( wSSector );
+    m_Node.elementSize      = sizeof ( wNode );
+    m_Reject.elementSize    = 1;
+    m_BlockMap.elementSize  = 1;
+    m_Behavior.elementSize  = 1;
 
     if ( bLoadData == true ) Load ();
 
@@ -112,54 +105,59 @@ DoomLevel::DoomLevel ( const char *_name, WAD *_wad, bool bLoadData ) :
 
 DoomLevel::~DoomLevel ()
 {
-    if ( m_Title ) free (( char * ) m_Title );
-    if ( m_Music ) free (( char * ) m_Music );
+    FUNCTION_ENTRY ( this, "DoomLevel dtor", true );
+
+    if ( m_Title != NULL ) free (( char * ) m_Title );
+    if ( m_Music != NULL ) free (( char * ) m_Music );
     CleanUp ();
 }
 
-// TBD
-bool DoomLevel::isValid ( bool checkBSP )
+bool DoomLevel::IsValid ( bool checkBSP, bool print ) const
 {
-    if ( m_Checked || ! m_Valid ) return m_Valid;
+    FUNCTION_ENTRY ( this, "DoomLevel::isValid", true );
 
-    int i;
-    
-    bool *used = new bool [ m_NoSideDefs ];
-    memset ( used, false, sizeof ( bool ) * m_NoSideDefs );
+    bool isValid = true;
+
+    bool *used = new bool [ SideDefCount () ];
+    memset ( used, false, sizeof ( bool ) * SideDefCount ());
 
     // Sanity check for LINEDEFS
-    for ( i = 0; i < m_NoLineDefs; i++ ) {
-        if ( m_LineDef [i].start >= m_NoVertices ) {
-            fprintf ( stderr, "LINEDEFS[%d].%s m_Vertex is invalid (%d/%d)\n", i, "start", m_LineDef [i].start, m_NoVertices );
-            m_Valid = false;
+    const wLineDef *lineDef = GetLineDefs ();
+
+    for ( int i = 0; i < LineDefCount (); i++ ) {
+        if ( lineDef [i].start >= VertexCount ()) {
+            if ( print == true ) fprintf ( stderr, "LINEDEFS[%d].%s vertex is invalid (%d/%d)\n", i, "start", lineDef [i].start, VertexCount ());
+            isValid = false;
         }
-        if ( m_LineDef [i].end >= m_NoVertices ) {
-            fprintf ( stderr, "LINEDEFS[%d].%s m_Vertex is invalid (%d/%d)\n", i, "end", m_LineDef [i].end, m_NoVertices );
-            m_Valid = false;
+        if ( lineDef [i].end >= VertexCount ()) {
+            if ( print == true ) fprintf ( stderr, "LINEDEFS[%d].%s vertex is invalid (%d/%d)\n", i, "end", lineDef [i].end, VertexCount ());
+            isValid = false;
         }
-        if ( m_LineDef [i].sideDef [ LEFT_SIDEDEF ] != NO_SIDEDEF ) {
-            if ( m_LineDef [i].sideDef [ LEFT_SIDEDEF ] >= m_NoSideDefs ) {
-                fprintf ( stderr, "LINEDEFS[%d].sideDef[%s] is invalid (%d/%d)\n", i, "left", m_LineDef [i].sideDef [LEFT_SIDEDEF], m_NoSideDefs );
-                m_Valid = false;
+        if ( lineDef [i].sideDef [ LEFT_SIDEDEF ] != NO_SIDEDEF ) {
+            if ( lineDef [i].sideDef [ LEFT_SIDEDEF ] >= SideDefCount ()) {
+                if ( print == true ) fprintf ( stderr, "LINEDEFS[%d].sideDef[%s] is invalid (%d/%d)\n", i, "left", lineDef [i].sideDef [LEFT_SIDEDEF], SideDefCount ());
+                isValid = false;
             } else {
-                used [ m_LineDef [i].sideDef [ LEFT_SIDEDEF ]] = true;
+                used [ lineDef [i].sideDef [ LEFT_SIDEDEF ]] = true;
             }
         }
-        if ( m_LineDef [i].sideDef [ RIGHT_SIDEDEF ] != NO_SIDEDEF ) {
-            if ( m_LineDef [i].sideDef [ RIGHT_SIDEDEF ] >= m_NoSideDefs ) {
-                fprintf ( stderr, "LINEDEFS[%d].sideDef[%s] is invalid (%d/%d)\n", i, "right", m_LineDef [i].sideDef [RIGHT_SIDEDEF], m_NoSideDefs );
-                m_Valid = false;
+        if ( lineDef [i].sideDef [ RIGHT_SIDEDEF ] != NO_SIDEDEF ) {
+            if ( lineDef [i].sideDef [ RIGHT_SIDEDEF ] >= SideDefCount ()) {
+                if ( print == true ) fprintf ( stderr, "LINEDEFS[%d].sideDef[%s] is invalid (%d/%d)\n", i, "right", lineDef [i].sideDef [RIGHT_SIDEDEF], SideDefCount ());
+                isValid = false;
             } else {
-                used [ m_LineDef [i].sideDef [ RIGHT_SIDEDEF ]] = true;
+                used [ lineDef [i].sideDef [ RIGHT_SIDEDEF ]] = true;
             }
         }
     }
 
     // Sanity check for SIDEDEFS
-    for ( i = 0; i < m_NoSideDefs; i++ ) {
-        if (( m_SideDef [i].sector >= m_NoSectors ) && ( used [i] )) {
-            fprintf ( stderr, "SIDEDEFS[%d].sector is invalid (%d/%d)\n", i, m_SideDef [i].sector, m_NoSectors );
-            m_Valid = false;
+    const wSideDef *sideDef = GetSideDefs ();
+
+    for ( int i = 0; i < SideDefCount (); i++ ) {
+        if (( sideDef [i].sector >= SectorCount ()) && ( used [i] == true )) {
+            if ( print == true ) fprintf ( stderr, "SIDEDEFS[%d].sector is invalid (%d/%d)\n", i, sideDef [i].sector, SectorCount ());
+            isValid = false;
         }
     }
 
@@ -168,269 +166,460 @@ bool DoomLevel::isValid ( bool checkBSP )
     if ( checkBSP == true ) {
 
         // Sanity check for SEGS
-        for ( i = 0; i < m_NoSegs; i++ ) {
-            if ( m_Segs [i].start >= m_NoVertices ) {
-                fprintf ( stderr, "SEGS[%d].%s m_Vertex is invalid (%d/%d)\n", i, "start", m_Segs [i].start, m_NoVertices );
-                m_Valid = false;
+        const wSegs *segs = GetSegs ();
+
+        for ( int i = 0; i < SegCount (); i++ ) {
+            if ( segs [i].start >= VertexCount ()) {
+                if ( print == true ) fprintf ( stderr, "SEGS[%d].%s m_Vertex is invalid (%d/%d)\n", i, "start", segs [i].start, VertexCount ());
+                isValid = false;
             }
-            if ( m_Segs [i].end >= m_NoVertices ) {
-                fprintf ( stderr, "SEGS[%d].%s m_Vertex is invalid (%d/%d)\n", i, "end", m_Segs [i].end, m_NoVertices );
-                m_Valid = false;
+            if ( segs [i].end >= VertexCount ()) {
+                if ( print == true ) fprintf ( stderr, "SEGS[%d].%s m_Vertex is invalid (%d/%d)\n", i, "end", segs [i].end, VertexCount ());
+                isValid = false;
             }
-            if ( m_Segs [i].lineDef >= m_NoLineDefs ) {
-                fprintf ( stderr, "SEGS[%d].lineDef is invalid (%d/%d)\n", i, m_Segs [i].lineDef, m_NoLineDefs );
-                m_Valid = false;
+            if ( segs [i].lineDef >= LineDefCount ()) {
+                if ( print == true ) fprintf ( stderr, "SEGS[%d].lineDef is invalid (%d/%d)\n", i, segs [i].lineDef, LineDefCount ());
+                isValid = false;
             }
+            if ( segs [i].start == segs [i].end ) {
+                if ( print == true ) fprintf ( stderr, "SEGS[%d] is zero length\n", i );
+                isValid = false;
+	    }
         }
 
         // Sanity check for SSECTORS
-        for ( i = 0; i < m_NoSubSectors; i++ ) {
-            if ( m_SubSector [i].first >= m_NoSegs ) {
-                fprintf ( stderr, "SSECTORS[%d].first is invalid (%d/%d)\n", i, m_SubSector [i].first, m_NoSegs );
-                m_Valid = false;
+        const wSSector *subSector = GetSubSectors ();
+
+        for ( int i = 0; i < SubSectorCount (); i++ ) {
+            if ( subSector [i].first >= SegCount ()) {
+                if ( print == true ) fprintf ( stderr, "SSECTORS[%d].first is invalid (%d/%d)\n", i, subSector [i].first, SegCount ());
+                isValid = false;
             }
-            if ( m_SubSector [i].first + m_SubSector [i].num > m_NoSegs ) {
-                fprintf ( stderr, "SSECTORS[%d].num is invalid (%d/%d)\n", i, m_SubSector [i].num, m_NoSegs );
-                m_Valid = false;
+            if ( subSector [i].first + subSector [i].num > SegCount ()) {
+                if ( print == true ) fprintf ( stderr, "SSECTORS[%d].num is invalid (%d/%d)\n", i, subSector [i].num, SegCount ());
+                isValid = false;
             }
         }
 
         // Sanity check for NODES
-        for ( i = 0; i < m_NoNodes; i++ ) {
-            USHORT child;
-            child = m_Node [i].child [0];
+        const wNode *node = GetNodes ();
+
+        if ( NodeCount () < 2 ) {
+            if ( print == true ) fprintf ( stderr, "NODES structure is invalid\n" );
+            isValid = false;
+        }
+
+        for ( int i = 0; i < NodeCount (); i++ ) {
+            UINT16 child;
+            child = node [i].child [0];
+            if (( node [i].dx == 0 ) && ( node[i].dy == 0 )) {
+                if ( print == true ) fprintf ( stderr, "NODES[%d] is invalid (dx == dy == 0)\n", i );
+                isValid = false;
+	    }
             if ( child & 0x8000 ) {
-                if (( child & 0x7FFF ) >= m_NoSubSectors ) {
-                    fprintf ( stderr, "NODES[%d].child[%d] is invalid (0x8000 | %d/%d)\n", i, 0, child & 0x7FFF, m_NoSubSectors );
-                    m_Valid = false;
+                if (( child & 0x7FFF ) >= SubSectorCount ()) {
+                    if ( print == true ) fprintf ( stderr, "NODES[%d].child[%d] is invalid (0x8000 | %d/%d)\n", i, 0, child & 0x7FFF, SubSectorCount ());
+                    isValid = false;
                 }
             } else {
-                if ( child >= m_NoNodes ) {
-                    fprintf ( stderr, "NODES[%d].child[%d] is invalid (%d/%d)\n", i, 0, child, m_NoNodes );
-                    m_Valid = false;
+                if ( child >= NodeCount ()) {
+                    if ( print == true ) fprintf ( stderr, "NODES[%d].child[%d] is invalid (%d/%d)\n", i, 0, child, NodeCount ());
+                    isValid = false;
                 }
             }
-            child = m_Node [i].child [1];
+            child = node [i].child [1];
             if ( child & 0x8000 ) {
-                if (( child & 0x7FFF ) >= m_NoSubSectors ) {
-                    fprintf ( stderr, "NODES[%d].child[%d] is invalid (0x8000 | %d/%d)\n", i, 1, child & 0x7FFF, m_NoSubSectors );
-                    m_Valid = false;
+                if (( child & 0x7FFF ) >= SubSectorCount ()) {
+                    if ( print == true ) fprintf ( stderr, "NODES[%d].child[%d] is invalid (0x8000 | %d/%d)\n", i, 1, child & 0x7FFF, SubSectorCount ());
+                    isValid = false;
                 }
             } else {
-                if ( child >= m_NoNodes ) {
-                    fprintf ( stderr, "NODES[%d].child[%d] is invalid (%d/%d)\n", i, 1, child, m_NoNodes );
-                    m_Valid = false;
+                if ( child >= NodeCount ()) {
+                    if ( print == true ) fprintf ( stderr, "NODES[%d].child[%d] is invalid (%d/%d)\n", i, 1, child, NodeCount ());
+                    isValid = false;
                 }
             }
         }
     }
 
-    m_Checked = true;
-        
-    return m_Valid;
+    return isValid;
 }
 
-bool DoomLevel::hasChanged () const	{ return m_Modified; }
-
-void DoomLevel::DeleteTransients ()
+bool DoomLevel::IsDirty () const
 {
-    if ( m_Segs ) 	{ delete m_Segs;	m_Segs      = NULL; }
-    if ( m_SubSector )	{ delete m_SubSector;	m_SubSector = NULL; }
-    if ( m_Node )	{ delete m_Node;	m_Node      = NULL; }
-    if ( m_Reject )	{ delete m_Reject;	m_Reject    = NULL; }
-    if ( m_BlockMap )	{ delete m_BlockMap;	m_BlockMap  = NULL; }
+    FUNCTION_ENTRY ( this, "DoomLevel::IsDirty", true );
+
+    if ( m_Map.changed == true ) return true;
+    if ( m_Thing.changed == true ) return true;
+    if ( m_LineDef.changed == true ) return true;
+    if ( m_SideDef.changed == true ) return true;
+    if ( m_Vertex.changed == true ) return true;
+    if ( m_Sector.changed == true ) return true;
+    if ( m_Segs.changed == true ) return true;
+    if ( m_SubSector.changed == true ) return true;
+    if ( m_Node.changed == true ) return true;
+    if ( m_Reject.changed == true ) return true;
+    if ( m_BlockMap.changed == true ) return true;
+    if ( m_Behavior.changed == true ) return true;
+
+    return false;
 }
 
-void DoomLevel::WipeOut ()
+void DoomLevel::CleanUpEntry ( sLevelLump *entry )
 {
-    m_Modified = false;
-    m_Checked  = false;
-    m_Valid    = false;
+    FUNCTION_ENTRY ( this, "DoomLevel::CleanUpEntry", true );
 
-    m_ThingsChanged     = false;
-    m_LineDefsChanged   = false;
-    m_SideDefsChanged   = false;
-    m_VerticesChanged   = false;
-    m_SectorsChanged    = false;
-    m_SegsChanged       = false;
-    m_SubSectorsChanged = false;
-    m_NodesChanged      = false;
-    m_RejectChanged     = false;
-    m_BlockMapChanged   = false;
+    delete [] ( char * ) entry->rawData;
 
-    m_NoThings     = 0;
-    m_NoLineDefs   = 0;
-    m_NoSideDefs   = 0;
-    m_NoVertices   = 0;
-    m_NoSectors    = 0;
- 
-    m_NoSegs       = 0;
-    m_NoSubSectors = 0;
-    m_NoNodes      = 0;
-
-    m_RejectSize   = 0;
-    m_BlockMapSize = 0;
-
-    m_Segs       = NULL;
-    m_SubSector  = NULL;
-    m_Node       = NULL;
-    m_Reject     = NULL;
-    m_BlockMap   = NULL;
-
-    m_RawThing   = NULL;
-    m_RawLineDef = NULL;
-
-    m_Thing      = NULL;
-    m_LineDef    = NULL;
-    m_SideDef    = NULL;
-    m_Vertex     = NULL;
-    m_Sector     = NULL;
+    entry->changed      = false;
+    entry->byteOrder    = BYTE_ORDER;
+    entry->elementCount = 0;
+    entry->dataSize     = 0;
+    entry->rawData      = NULL;
 }
 
 void DoomLevel::CleanUp ()
 {
-    DeleteTransients ();
+    FUNCTION_ENTRY ( this, "DoomLevel::CleanUp", true );
 
-    if ( m_RawThing )   { delete [] m_RawThing;    m_RawThing   = NULL; }
-    if ( m_RawLineDef ) { delete [] m_RawLineDef;  m_RawLineDef = NULL; }
+    CleanUpEntry ( &m_Map );
+    CleanUpEntry ( &m_Thing );
+    CleanUpEntry ( &m_LineDef );
+    CleanUpEntry ( &m_SideDef );
+    CleanUpEntry ( &m_Vertex );
+    CleanUpEntry ( &m_Sector );
+    CleanUpEntry ( &m_Segs );
+    CleanUpEntry ( &m_SubSector );
+    CleanUpEntry ( &m_Node );
+    CleanUpEntry ( &m_Reject );
+    CleanUpEntry ( &m_BlockMap );
+    CleanUpEntry ( &m_Behavior );
 
-    if ( m_MapData )    { delete [] m_MapData;     m_MapData    = NULL; }
-    if ( m_Thing )      { delete [] m_Thing;       m_Thing      = NULL; }
-    if ( m_LineDef )    { delete [] m_LineDef;     m_LineDef    = NULL; }
-    if ( m_SideDef )    { delete [] m_SideDef;     m_SideDef    = NULL; }
-    if ( m_Vertex )     { delete [] m_Vertex;      m_Vertex     = NULL; }
-    if ( m_Sector )     { delete [] m_Sector;      m_Sector     = NULL; }
+    delete [] m_ThingData;
+    delete [] m_LineDefData;
 
-    WipeOut ();
+    m_ThingData   = NULL;
+    m_LineDefData = NULL;
 }
 
-#if defined ( BIG_ENDIAN )
-void DoomLevel::AdjustByteOrder ()
+#if ( BYTE_ORDER == BIG_ENDIAN )
+
+void DoomLevel::AdjustByteOrderMap ( int byteOrder )
 {
-    /*
-        char       *m_RawThing;		// Check Format
-        char       *m_RawLineDef;		// Check Format
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderMap", true );
 
-        wThing     *m_Thing;
-        wLineDef   *m_LineDef;
-        wSideDef   *m_SideDef;
-        wVertex    *m_Vertex;
-        wSector    *m_Sector;
+    if ( m_Map.byteOrder != byteOrder ) {
+        // Nothing to do for this type
+    }
 
-        wSegs      *m_Segs;
-        wSSector   *m_SubSector;
-        wNode      *node;
-        wReject    *m_Reject;		// May m_Not need to be swapped
-        wBlockMap  *m_BlockMap;
-    */
+    m_Map.byteOrder = byteOrder;
 }
-#endif
-
-void DoomLevel::TrimVertices ()
+
+void DoomLevel::AdjustByteOrderThing ( int byteOrder )
 {
-    m_Modified = true;
-    m_VerticesChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderThing", true );
 
-    long highBit = 1L << ( 8 * sizeof ( long ) - 1 );
-    long *Used = new long [ m_NoVertices ];
-    memset ( Used, 0, sizeof ( long ) * m_NoVertices );
-    int i;
-    for ( i = 0; i < m_NoLineDefs; i++ ) {
-        Used [ m_LineDef [i].start ] = highBit;
-        Used [ m_LineDef [i].end ] = highBit;
-    }
-    if ( m_Segs ) for ( int i = 0; i < m_NoSegs; i++ ) {
-        Used [ m_Segs [i].start ] = highBit;
-        Used [ m_Segs [i].end ] = highBit;
-    }
-
-    int usedCount = 0;
-    wVertex *newVertices = new wVertex [ m_NoVertices ];
-    for ( i = 0; i < m_NoVertices; i++ ) {
-        if ( Used [i] ) {
-            newVertices [usedCount] = m_Vertex [i];
-            Used [i] |= usedCount++;
+    if ( m_Thing.byteOrder != byteOrder ) {
+        wThing *thing = m_ThingData;
+        for ( int i = 0; i < m_Thing.elementCount; i++ ) {
+            thing [i].xPos     = SWAP_ENDIAN_16 ( thing [i].xPos );
+            thing [i].yPos     = SWAP_ENDIAN_16 ( thing [i].yPos );
+            thing [i].angle    = SWAP_ENDIAN_16 ( thing [i].angle );
+            thing [i].type     = SWAP_ENDIAN_16 ( thing [i].type );
+            thing [i].attr     = SWAP_ENDIAN_16 ( thing [i].attr );
+            thing [i].tid      = SWAP_ENDIAN_16 ( thing [i].tid );
+            thing [i].altitude = SWAP_ENDIAN_16 ( thing [i].altitude );
         }
     }
-    for ( i = 0; i < m_NoLineDefs; i++ ) {
-        m_LineDef [i].start = ( USHORT ) ( Used [ m_LineDef [i].start ] & ~highBit );
-        m_LineDef [i].end = ( USHORT ) ( Used [ m_LineDef [i].end ] & ~highBit );
-    }
-    if ( m_Segs ) for ( int i = 0; i < m_NoSegs; i++ ) {
-        m_Segs [i].start = ( USHORT ) ( Used [ m_Segs [i].start ] & ~highBit );
-        m_Segs [i].end = ( USHORT ) ( Used [ m_Segs [i].end ] & ~highBit );
+
+    m_Thing.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderLineDef ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderLineDef", true );
+
+    if ( m_LineDef.byteOrder != byteOrder ) {
+        wLineDef *lineDef = m_LineDefData;
+        for ( int i = 0; i < m_LineDef.elementCount; i++ ) {
+            lineDef [i].start       = SWAP_ENDIAN_16 ( lineDef [i].start );
+            lineDef [i].end         = SWAP_ENDIAN_16 ( lineDef [i].end );
+            lineDef [i].flags       = SWAP_ENDIAN_16 ( lineDef [i].flags );
+            lineDef [i].type        = SWAP_ENDIAN_16 ( lineDef [i].type );
+            lineDef [i].tag         = SWAP_ENDIAN_16 ( lineDef [i].tag );
+            lineDef [i].sideDef [0] = SWAP_ENDIAN_16 ( lineDef [i].sideDef [0] );
+            lineDef [i].sideDef [1] = SWAP_ENDIAN_16 ( lineDef [i].sideDef [1] );
+        }
     }
 
-    if ( m_NoVertices != usedCount ) {
-        m_LineDefsChanged = true;
-        m_VerticesChanged = true;
-        m_SegsChanged     = true;
+    m_LineDef.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderSideDef ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderSideDef", true );
+
+    if ( m_SideDef.byteOrder != byteOrder ) {
+        wSideDef *sideDef = ( wSideDef * ) m_SideDef.rawData;
+        for ( int i = 0; i < m_SideDef.elementCount; i++ ) {
+            sideDef [i].xOff   = SWAP_ENDIAN_16 ( sideDef [i].xOff );
+            sideDef [i].yOff   = SWAP_ENDIAN_16 ( sideDef [i].yOff );
+            sideDef [i].sector = SWAP_ENDIAN_16 ( sideDef [i].sector );
+        }
     }
- 
-    m_NoVertices = usedCount;
-    delete [] m_Vertex;
-    delete [] Used;
-    m_Vertex = newVertices;
+
+    m_SideDef.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderVertex ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderVertex", true );
+
+    if ( m_Vertex.byteOrder != byteOrder ) {
+        wVertex *vertex = ( wVertex * ) m_Vertex.rawData;
+        for ( int i = 0; i < m_Vertex.elementCount; i++ ) {
+            vertex [i].x = SWAP_ENDIAN_16 ( vertex [i].x );
+            vertex [i].y = SWAP_ENDIAN_16 ( vertex [i].y );
+        }
+    }
+
+    m_Vertex.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderSector ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderSector", true );
+
+    if ( m_Sector.byteOrder != byteOrder ) {
+        wSector *sector = ( wSector * ) m_Sector.rawData;
+        for ( int i = 0; i < m_Sector.elementCount; i++ ) {
+            sector [i].floorh  = SWAP_ENDIAN_16 ( sector [i].floorh );
+            sector [i].ceilh   = SWAP_ENDIAN_16 ( sector [i].ceilh );
+            sector [i].light   = SWAP_ENDIAN_16 ( sector [i].light );
+            sector [i].special = SWAP_ENDIAN_16 ( sector [i].special );
+            sector [i].trigger = SWAP_ENDIAN_16 ( sector [i].trigger );
+        }
+    }
+
+    m_Sector.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderSegs ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderSegs", true );
+
+    if ( m_Segs.byteOrder != byteOrder ) {
+        wSegs *segs = ( wSegs * ) m_Segs.rawData;
+        for ( int i = 0; i < m_Segs.elementCount; i++ ) {
+            segs [i].start   = SWAP_ENDIAN_16 ( segs [i].start );
+            segs [i].end     = SWAP_ENDIAN_16 ( segs [i].end );
+            segs [i].angle   = SWAP_ENDIAN_16 ( segs [i].angle );
+            segs [i].lineDef = SWAP_ENDIAN_16 ( segs [i].lineDef );
+            segs [i].flip    = SWAP_ENDIAN_16 ( segs [i].flip );
+            segs [i].offset  = SWAP_ENDIAN_16 ( segs [i].offset );
+        }
+    }
+
+    m_Segs.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderSubSector ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderSubSector", true );
+
+    if ( m_SubSector.byteOrder != byteOrder ) {
+        wSSector *ssector = ( wSSector * ) m_SubSector.rawData;
+        for ( int i = 0; i < m_SubSector.elementCount; i++ ) {
+            ssector [i].num   = SWAP_ENDIAN_16 ( ssector [i].num );
+            ssector [i].first = SWAP_ENDIAN_16 ( ssector [i].first );
+        }
+    }
+
+    m_SubSector.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderNode ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderNode", true );
+
+    if ( m_Node.byteOrder != byteOrder ) {
+        // The entire structure is composed of 16-bit entries
+        UINT16 *ptr = ( UINT16 * ) m_Node.rawData;
+        for ( int i = 0; i < ( int ) m_Node.dataSize / 2; i++ ) {
+            ptr [i] = SWAP_ENDIAN_16 ( ptr [i] );
+        }
+    }
+
+    m_Node.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderReject ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderReject", true );
+
+    if ( m_Reject.byteOrder != byteOrder ) {
+        // Nothing to do for this type
+    }
+
+    m_Reject.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderBlockMap ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderBlockMap", true );
+
+
+    if ( m_BlockMap.byteOrder != byteOrder ) {
+        // The entire structure is composed of 16-bit entries
+        UINT16 *ptr = ( UINT16 * ) m_BlockMap.rawData;
+        for ( int i = 0; i < ( int ) m_BlockMap.dataSize / 2; i++ ) {
+            ptr [i] = SWAP_ENDIAN_16 ( ptr [i] );
+        }
+    }
+
+    m_BlockMap.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrderBehavior ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrderBehavior", true );
+
+    if ( m_Behavior.byteOrder != byteOrder ) {
+        // Nothing to do for this type
+    }
+
+    m_Behavior.byteOrder = byteOrder;
+}
+
+void DoomLevel::AdjustByteOrder ( int byteOrder )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::AdjustByteOrder", true );
+
+    AdjustByteOrderMap ( byteOrder );
+    AdjustByteOrderThing ( byteOrder );
+    AdjustByteOrderLineDef ( byteOrder );
+    AdjustByteOrderSideDef ( byteOrder );
+    AdjustByteOrderVertex ( byteOrder );
+    AdjustByteOrderSector ( byteOrder );
+    AdjustByteOrderSegs ( byteOrder );
+    AdjustByteOrderSubSector ( byteOrder );
+    AdjustByteOrderNode ( byteOrder );
+    AdjustByteOrderReject ( byteOrder );
+    AdjustByteOrderBlockMap ( byteOrder );
+    AdjustByteOrderBehavior ( byteOrder );
+}
+
+#endif
+
+void DoomLevel::ReplaceVertices ( int *map, wVertex *newVertices, int count )
+{
+    wLineDef *lineDef = ( wLineDef * ) GetLineDefs ();
+    for ( int i = 0; i < LineDefCount (); i++ ) {
+        lineDef [i].start = ( UINT16 ) map [ lineDef [i].start ];
+        lineDef [i].end   = ( UINT16 ) map [ lineDef [i].end ];
+    }
+
+    m_LineDef.changed = true;
+
+    wSegs *segs = ( wSegs * ) GetSegs ();
+    for ( int i = 0; i < SegCount (); i++ ) {
+        segs [i].start = ( UINT16 ) map [ segs [i].start ];
+        segs [i].end   = ( UINT16 ) map [ segs [i].end ];
+    }
+
+    m_Segs.changed    = true;
+
+    delete [] ( char * ) m_Vertex.rawData;
+    delete [] map;
+
+    m_Vertex.changed      = true;
+    m_Vertex.elementCount = count;
+    m_Vertex.rawData      = newVertices;
+}
+
+void DoomLevel::TrimVertices ()
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::TrimVertices", true );
+
+    int *used = new int [ VertexCount () ];
+    memset ( used, 0, sizeof ( int ) * VertexCount ());
+
+    wLineDef *lineDef = ( wLineDef * ) GetLineDefs ();
+    for ( int i = 0; i < LineDefCount (); i++ ) {
+        used [ lineDef [i].start ] = 1;
+        used [ lineDef [i].end ]   = 1;
+    }
+
+    wSegs *segs = ( wSegs * ) GetSegs ();
+    for ( int i = 0; i < SegCount (); i++ ) {
+        used [ segs [i].start ] = 1;
+        used [ segs [i].end ]   = 1;
+    }
+
+    const wVertex *oldVertices = GetVertices ();
+    wVertex *newVertices = new wVertex [ VertexCount () ];
+
+    int count = 0;
+    for ( int i = 0; i < VertexCount (); i++ ) {
+        if ( used [i] == 1 ) {
+            newVertices [count] = oldVertices [i];
+            used [i]            = count++;
+        }
+    }
+
+    if ( VertexCount () == count ) {
+        delete [] newVertices;
+        delete [] used;
+        return;
+    }
+
+    ReplaceVertices ( used, newVertices, count );
 }
 
 void DoomLevel::PackVertices ()
 {
-    m_Modified = true;
-    m_VerticesChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::PackVertices", true );
 
-#if defined ( __BORLANDC__ )
-    #if sizeof ( wVertex ) != sizeof ( long )
-        #error Sorry, PackVertices assumes sizeof ( wVertex ) == sizeof ( long )
-    #endif
-#endif
-    long *vert = ( long * ) m_Vertex;
-    int *Used = new int [ m_NoVertices ], newCount = 0;
-    memset ( Used, 0, sizeof ( int ) * m_NoVertices );
-    int i, j;
-    for ( i = 0; i < m_NoVertices; i++ ) {
-        long currentVert = vert [i];
+    int *used = new int [ VertexCount () ];
+    memset ( used, 0, sizeof ( int ) * VertexCount ());
+
+    int count = 0;
+    UINT32 *vert = ( UINT32 * ) m_Vertex.rawData;
+
+    for ( int i = 0, j; i < VertexCount (); i++ ) {
+        UINT32 currentVert = vert [i];
         for ( j = 0; j < i; j++ ) {
             if ( vert [j] == currentVert ) break;
         }
-        Used [i] = j;
-        if ( i == j ) newCount++;
+        used [i] = j;
+        if ( i == j ) count++;
     }
 
-    int usedCount = 0;
-    wVertex *newVertices = new wVertex [ newCount ];
-    for ( i = 0; i < m_NoVertices; i++ ) {
-        if ( Used [i] == i ) {
-            newVertices [usedCount] = m_Vertex [i];
-            Used [i] = usedCount++;
+    if ( VertexCount () == count ) {
+        delete [] used;
+        return;
+    }
+
+    const wVertex *oldVertices = GetVertices ();
+    wVertex *newVertices = new wVertex [ count ];
+
+    count = 0;
+    for ( int i = 0; i < VertexCount (); i++ ) {
+        if ( used [i] == i ) {
+            newVertices [count] = oldVertices [i];
+            used [i]            = count++;
         } else {
-            Used [i] = Used [ Used [i]];
+            used [i] = used [ used [i]];
         }
     }
 
-    for ( i = 0; i < m_NoLineDefs; i++ ) {
-        m_LineDef [i].start = ( USHORT ) ( Used [ m_LineDef [i].start ]);
-        m_LineDef [i].end = ( USHORT ) ( Used [ m_LineDef [i].end ]);
-    }
-
-    if ( m_Segs ) for ( i = 0; i < m_NoSegs; i++ ) {
-        m_Segs [i].start = ( USHORT ) ( Used [ m_Segs [i].start ]);
-        m_Segs [i].end = ( USHORT ) ( Used [ m_Segs [i].end ]);
-    }
-
-    if ( m_NoVertices != usedCount ) {
-        m_LineDefsChanged = true;
-        m_VerticesChanged = true;
-        m_SegsChanged     = true;
-    }
- 
-    m_NoVertices = newCount;
-    delete [] m_Vertex;
-    delete [] Used;
-    m_Vertex = newVertices;
+    ReplaceVertices ( used, newVertices, count );
 }
 
 void DoomLevel::ConvertRaw1ToThing ( int max, wThing1 *src, wThing *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertRaw1ToThing", true );
+
     memset ( dest, 0, sizeof ( wThing ) * max );
     for ( int i = 0; i < max; i++ ) {
         memcpy ( &dest [i], &src [i], sizeof ( wThing1 ));
@@ -439,6 +628,8 @@ void DoomLevel::ConvertRaw1ToThing ( int max, wThing1 *src, wThing *dest )
 
 void DoomLevel::ConvertRaw2ToThing ( int max, wThing2 *src, wThing *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertRaw2ToThing", true );
+
     memset ( dest, 0, sizeof ( wThing ) * max );
     for ( int i = 0; i < max; i++ ) {
         dest [i].xPos     = src [i].xPos;
@@ -455,6 +646,8 @@ void DoomLevel::ConvertRaw2ToThing ( int max, wThing2 *src, wThing *dest )
 
 void DoomLevel::ConvertThingToRaw1 ( int max, wThing *src, wThing1 *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertThingToRaw1", true );
+
     memset ( dest, 0, sizeof ( wThing1 ) * max );
     for ( int i = 0; i < max; i++ ) {
         memcpy ( &dest [i], &src [i], sizeof ( wThing1 ));
@@ -463,6 +656,8 @@ void DoomLevel::ConvertThingToRaw1 ( int max, wThing *src, wThing1 *dest )
 
 void DoomLevel::ConvertThingToRaw2 ( int max, wThing *src, wThing2 *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertThingToRaw2", true );
+
     memset ( dest, 0, sizeof ( wThing2 ) * max );
     for ( int i = 0; i < max; i++ ) {
         dest [i].xPos     = src [i].xPos;
@@ -479,6 +674,8 @@ void DoomLevel::ConvertThingToRaw2 ( int max, wThing *src, wThing2 *dest )
 
 void DoomLevel::ConvertRaw1ToLineDef ( int max, wLineDef1 *src, wLineDef *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertRaw1ToLineDef", true );
+
     memset ( dest, 0, sizeof ( wLineDef ) * max );
     for ( int i = 0; i < max; i++ ) {
         memcpy ( &dest [i], &src [i], sizeof ( wLineDef1 ));
@@ -487,6 +684,8 @@ void DoomLevel::ConvertRaw1ToLineDef ( int max, wLineDef1 *src, wLineDef *dest )
 
 void DoomLevel::ConvertRaw2ToLineDef ( int max, wLineDef2 *src, wLineDef *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertRaw2toLineDef", true );
+
     memset ( dest, 0, sizeof ( wLineDef ) * max );
     for ( int i = 0; i < max; i++ ) {
         dest [i].start      = src [i].start;
@@ -503,6 +702,8 @@ void DoomLevel::ConvertRaw2ToLineDef ( int max, wLineDef2 *src, wLineDef *dest )
 
 void DoomLevel::ConvertLineDefToRaw1 ( int max, wLineDef *src, wLineDef1 *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertLineDefToRaw1", true );
+
     memset ( dest, 0, sizeof ( wLineDef1 ) * max );
     for ( int i = 0; i < max; i++ ) {
         memcpy ( &dest [i], &src [i], sizeof ( wLineDef1 ));
@@ -511,6 +712,8 @@ void DoomLevel::ConvertLineDefToRaw1 ( int max, wLineDef *src, wLineDef1 *dest )
 
 void DoomLevel::ConvertLineDefToRaw2 ( int max, wLineDef *src, wLineDef2 *dest )
 {
+    FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertLineDefToRaw2", true );
+
     memset ( dest, 0, sizeof ( wLineDef2 ) * max );
     for ( int i = 0; i < max; i++ ) {
         dest [i].start      = src [i].start;
@@ -523,174 +726,191 @@ void DoomLevel::ConvertLineDefToRaw2 ( int max, wLineDef *src, wLineDef2 *dest )
     }
 }
 
-void DoomLevel::ReadThings ( bool testFormat, const wadDirEntry *start, const wadDirEntry *end )
+bool DoomLevel::LoadThings ( bool hexenFormat )
 {
-    ULONG temp;
+    FUNCTION_ENTRY ( this, "DoomLevel::LoadThings", true );
 
-    const wadDirEntry *dir = m_Wad->FindDir ( "THINGS", start, end );
-    if ( dir == NULL ) return;
+    int size  = 0;
+    int count = 0;
 
-    // Make sure this isn't really a HEXEN m_Wad in disguise
-    if ( testFormat && ( m_NewFormat == false )) {
-        wThing1 *testThing = ( wThing1 * ) m_Wad->ReadEntry ( dir, &temp, true );
-        int count = dir->size / sizeof ( wThing1 );
-        // sizeof ( wThing2 ) is a multiple of sizeof ( wThing1 )
-        if (( count & 0x0001 ) == 0 ) {
-            int minX = 65536, m_NoType0s = 0, m_NoX0s = 0, m_NoBadAngles = 0;
-            for ( int i = 0; i < count; i++ ) {
-                if ( testThing[i].xPos < minX ) minX = testThing[i].xPos;
-                if ( testThing[i].xPos == 0 ) m_NoX0s++;
-                if ( testThing[i].type == 0 ) m_NoType0s++;
-                if ( testThing[i].angle % 45 ) m_NoBadAngles++;
-            }
-            int bad = 0, threshold = ( count + 2 ) / 3;
-            if ( minX >= 0 ) bad++;
-            if ( m_NoX0s > threshold ) bad++;
-            if ( m_NoType0s > threshold ) bad++;
-            if ( m_NoBadAngles > threshold ) bad++;
-            if ( bad > 1 ) m_NewFormat = true;
-        }
-        delete testThing;
-    }
+    delete [] m_ThingData;
 
-    m_RawThing = ( char * ) m_Wad->ReadEntry ( dir, &temp );
-
-    if ( m_NewFormat ) {
-        m_NoThings = temp / sizeof ( wThing2 );
-        m_Thing = new wThing [ m_NoThings ];
-        ConvertRaw2ToThing ( m_NoThings, ( wThing2 * ) m_RawThing, m_Thing );
+    if ( hexenFormat == false ) {
+        size        = sizeof ( wThing1 );
+        count       = m_Thing.dataSize / size;
+        m_ThingData = new wThing [ count ];
+        ConvertRaw1ToThing ( count, ( wThing1 * ) m_Thing.rawData, m_ThingData );
     } else {
-        m_NoThings = temp / sizeof ( wThing1 );
-        m_Thing = new wThing [ m_NoThings ];
-        ConvertRaw1ToThing ( m_NoThings, ( wThing1 * ) m_RawThing, m_Thing );
+        size        = sizeof ( wThing2 );
+        count       = m_Thing.dataSize / size;
+        m_ThingData = new wThing [ count ];
+        ConvertRaw2ToThing ( count, ( wThing2 * ) m_Thing.rawData, m_ThingData );
     }
+
+    m_Thing.byteOrder    = LITTLE_ENDIAN;
+    m_Thing.elementCount = count;
+    m_Thing.elementSize  = size;
+
+    return (( int ) m_Thing.dataSize == size * count ) ? true : false;
 }
 
-bool DoomLevel::ReadLineDefs ( const wadDirEntry *start, const wadDirEntry *end )
+bool DoomLevel::LoadLineDefs ( bool hexenFormat )
 {
-    ULONG temp;
-    const wadDirEntry *dir = m_Wad->FindDir ( "LINEDEFS", start, end );
+    FUNCTION_ENTRY ( this, "DoomLevel::LoadLineDefs", true );
 
-    // Make sure we have the correct format
-    if (( m_NewFormat == true ) && ( dir->size % sizeof ( wLineDef2 ))) return true;
-    if (( m_NewFormat == false ) && ( dir->size % sizeof ( wLineDef1 ))) return true;
+    int size  = 0;
+    int count = 0;
 
-    m_RawLineDef = ( char * ) m_Wad->ReadEntry ( dir, &temp );
+    delete [] m_LineDefData;
 
-    if ( m_NewFormat ) {
-        m_NoLineDefs = temp / sizeof ( wLineDef2 );
-        m_LineDef = new wLineDef [ m_NoLineDefs ];
-        ConvertRaw2ToLineDef ( m_NoLineDefs, ( wLineDef2 * ) m_RawLineDef, m_LineDef );
-        for ( int i = 0; i < m_NoLineDefs; i++ ) {
-            if ( m_LineDef [i].sideDef [ RIGHT_SIDEDEF ] == NO_SIDEDEF ) return true;
-        }
+    if ( hexenFormat == false ) {
+        size        = sizeof ( wLineDef1 );
+        count       = m_LineDef.dataSize / size;
+        m_LineDefData = new wLineDef [ count ];
+        ConvertRaw1ToLineDef ( count, ( wLineDef1 * ) m_LineDef.rawData, m_LineDefData );
     } else {
-        m_NoLineDefs = temp / sizeof ( wLineDef1 );
-        m_LineDef = new wLineDef [ m_NoLineDefs ];
-        ConvertRaw1ToLineDef ( m_NoLineDefs, ( wLineDef1 * ) m_RawLineDef, m_LineDef );
+        size        = sizeof ( wLineDef2 );
+        count       = m_LineDef.dataSize / size;
+        m_LineDefData = new wLineDef [ count ];
+        ConvertRaw2ToLineDef ( count, ( wLineDef2 * ) m_LineDef.rawData, m_LineDefData );
     }
-    return false;
+
+    m_LineDef.byteOrder    = LITTLE_ENDIAN;
+    m_LineDef.elementCount = count;
+    m_LineDef.elementSize  = size;
+
+    return (( int ) m_LineDef.dataSize == size * count ) ? true : false;
 }
 
-int DoomLevel::Load ()
+bool DoomLevel::ReadEntry ( sLevelLump *entry, const char *name, const wadDirEntry *start, const wadDirEntry *end, bool required )
 {
-    if ( m_Wad == NULL ) return false;
+    FUNCTION_ENTRY ( this, "DoomLevel::ReadEntry", true );
 
-    const wadDirEntry *dir;
-    const wadDirEntry *start = m_Wad->FindDir ( Name ());
-    const wadDirEntry *end = start + min ( 10, m_Wad->DirSize () - 1 );
+    const wadDirEntry *dir = m_Wad->FindDir ( name, start, end );
 
-    if ( start == NULL ) return false;
+    if ( dir == NULL ) return ( required == true ) ? false : true;
 
-    ULONG temp;
-
-    m_NewFormat = ( start->size > 0 ) ? true : false;
-
-    m_MapData = ( char * ) m_Wad->ReadEntry ( start, &temp );
-    m_MapDataSize = temp;
-
-    start += 1;
-
-    bool wrongFormat = true;
-    for ( int i = 0; wrongFormat && ( i < 2 ); i++ ) {
-        CleanUp ();
-        ReadThings (( i == 0 ) ? true : false, start, end );
-        wrongFormat = ReadLineDefs ( start, end );
-        if ( wrongFormat ) m_NewFormat = ! m_NewFormat;
-    }
-
-    if ( wrongFormat ) {
-        CleanUp ();
-        return false;
-    } else {
-        m_Valid = true;
-    }
-
-    dir = m_Wad->FindDir ( "SIDEDEFS", start, end );
-    if ( dir == NULL ) return false;
-    m_SideDef = ( wSideDef * ) m_Wad->ReadEntry ( dir, &temp );
-    m_NoSideDefs = temp / sizeof ( wSideDef );
-
-    dir = m_Wad->FindDir ( "VERTEXES", start, end );
-    if ( dir == NULL ) return false;
-    m_Vertex = ( wVertex * ) m_Wad->ReadEntry ( dir, &temp );
-    m_NoVertices = temp / sizeof ( wVertex );
-
-    dir = m_Wad->FindDir ( "SECTORS", start, end );
-    if ( dir == NULL ) return false;
-    m_Sector = ( wSector * ) m_Wad->ReadEntry ( dir, &temp );
-    m_NoSectors = temp / sizeof ( wSector );
-
-    dir = m_Wad->FindDir ( "SEGS", start, end );
-    if ( dir != NULL ) {
-        m_Segs = ( wSegs * ) m_Wad->ReadEntry ( dir, &temp );
-        m_NoSegs = temp / sizeof ( wSegs );
-    }
-
-    dir = m_Wad->FindDir ( "SSECTORS", start, end );
-    if ( dir != NULL ) {
-        m_SubSector = ( wSSector * ) m_Wad->ReadEntry ( dir, &temp );
-        m_NoSubSectors = temp / sizeof ( wSSector );
-    }
-
-    dir = m_Wad->FindDir ( "NODES", start, end );
-    if ( dir != NULL ) {
-        m_Node = ( wNode * ) m_Wad->ReadEntry ( dir, &temp );
-        m_NoNodes = temp / sizeof ( wNode );
-    }
-
-    dir = m_Wad->FindDir ( "REJECT", start, end );
-    if ( dir != NULL ) {
-        m_Reject = ( wReject * ) m_Wad->ReadEntry ( dir, &temp );
-        m_RejectSize = temp;
-    }
-
-    dir = m_Wad->FindDir ( "BLOCKMAP", start, end );
-    if ( dir != NULL ) {
-        m_BlockMap = ( wBlockMap * ) m_Wad->ReadEntry ( dir, &temp );
-        m_BlockMapSize = temp;
-    }
-
-#if defined ( BIG_ENDIAN )
-    AdjustByteOrder ();
-#endif
+    entry->rawData      = m_Wad->ReadEntry ( dir, &entry->dataSize );
+    entry->elementCount = entry->dataSize / entry->elementSize;
+    entry->byteOrder    = LITTLE_ENDIAN;
 
     return true;
 }
-
-void DoomLevel::LoadHexenInfo ()
+
+void DoomLevel::DetermineType ()
 {
+    FUNCTION_ENTRY ( this, "DoomLevel::DetermineType", true );
+
+    m_IsHexen = false;
+
+    // Look for the easy things first
+    if ( m_Behavior.rawData != NULL ) {
+        m_IsHexen = true;
+        return;
+    }
+
+    // See if we have an exact match in structure sizes in only 1 of the two formats
+    int isType1 = ( m_Thing.dataSize % sizeof ( wThing1 )) + ( m_LineDef.dataSize % sizeof ( wLineDef1 ));
+    int isType2 = ( m_Thing.dataSize % sizeof ( wThing2 )) + ( m_LineDef.dataSize % sizeof ( wLineDef2 ));
+
+    if ( isType1 != isType2 ) {
+        if ( isType1 == 0 ) return;
+        if ( isType2 == 0 ) {
+            m_IsHexen = true;
+            return;
+        }
+    }
+
+    // See if we have a valid level in only 1 of the two formats
+    LoadThings ( false );
+    LoadLineDefs ( false );
+
+    // Make sure we have the correct byte order
+    AdjustByteOrder ( BYTE_ORDER );
+
+    bool isValid1 = IsValid ( false, false );
+
+    LoadThings ( true );
+    LoadLineDefs ( true );
+
+    // Make sure we have the correct byte order
+    AdjustByteOrder ( BYTE_ORDER );
+
+    bool isValid2 = IsValid ( false, false );
+
+    if ( isValid1 != isValid2 ) {
+        if ( isValid1 == true ) return;
+        if ( isValid2 == true ) {
+            m_IsHexen = true;
+            return;
+        }
+    }
+
+    // Pick the one with the fewest invalid things found?
+    fprintf ( stderr, "Argh!!!\n" );
+}
+
+bool DoomLevel::Load ()
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::Load", true );
+
+    if ( m_Wad == NULL ) return false;
+
+    const wadDirEntry *start = m_Wad->FindDir ( Name ());
+
+    if ( start == NULL ) return false;
+
+    const wadDirEntry *end = start + min ( 11, ( int ) ( m_Wad->DirSize () - 1 ));
+
+    bool valid = true;
+
+    valid &= ReadEntry ( &m_Map,       Name (),    start, end, true );
+    valid &= ReadEntry ( &m_Thing,     "THINGS",   start, end, true );
+    valid &= ReadEntry ( &m_LineDef,   "LINEDEFS", start, end, true );
+    valid &= ReadEntry ( &m_SideDef,   "SIDEDEFS", start, end, true );
+    valid &= ReadEntry ( &m_Vertex,    "VERTEXES", start, end, true );
+    valid &= ReadEntry ( &m_Sector,    "SECTORS",  start, end, true );
+    valid &= ReadEntry ( &m_Segs,      "SEGS",     start, end, false );
+    valid &= ReadEntry ( &m_SubSector, "SSECTORS", start, end, false );
+    valid &= ReadEntry ( &m_Node,      "NODES",    start, end, false );
+    valid &= ReadEntry ( &m_Reject,    "REJECT",   start, end, false );
+    valid &= ReadEntry ( &m_BlockMap,  "BLOCKMAP", start, end, false );
+    valid &= ReadEntry ( &m_Behavior,  "BEHAVIOR", start, end, false );
+
+    if ( RejectSize () != 0 ) {
+        int mask = ( 0xFF >> ( RejectSize () * 8 - SectorCount () * SectorCount ())) & 0xFF;
+        (( UINT8 * ) m_Reject.rawData ) [ RejectSize () - 1 ] &= ( UINT8 ) mask;
+    }
+
+    DetermineType ();
+
+    LoadThings ( m_IsHexen );
+    LoadLineDefs ( m_IsHexen );
+
+    // Switch to native byte ordering
+    AdjustByteOrder ( BYTE_ORDER );
+
+    return valid;
+}
+
+bool DoomLevel::LoadHexenInfo ()
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::LoadHexenInfo", true );
+
+    if ( m_Wad == NULL ) return false;
+
     const wadDirEntry *dir = m_Wad->FindDir ( "MAPINFO" );
-    if ( dir == NULL ) return;
+
+    if ( dir == NULL ) return false;
 
     int level;
     sscanf ( m_Name, "MAP%02d", &level );
 
-    ULONG Size;
+    UINT32 Size;
     char *buffer = ( char * ) m_Wad->ReadEntry ( dir, &Size, true );
     char *ptr = buffer;
 
-    if ( m_Title ) free (( char * ) m_Title );
+    if ( m_Title != NULL ) free (( char * ) m_Title );
     m_Title = NULL;
 
     do {
@@ -711,9 +931,9 @@ void DoomLevel::LoadHexenInfo ()
         }
     } while ( ptr && *ptr );
 
-    delete buffer;
+    delete [] buffer;
 
-    if ( m_Title ) {
+    if ( m_Title != NULL ) {
         ptr = ( char * ) m_Title + 1;
         while ( *ptr ) {
             *ptr = ( char ) tolower ( *ptr );
@@ -726,7 +946,7 @@ void DoomLevel::LoadHexenInfo ()
     }
 
     dir = m_Wad->FindDir ( "SNDINFO" );
-    if ( dir == NULL ) return;
+    if ( dir == NULL ) return true;
 
     buffer = ( char * ) m_Wad->ReadEntry ( dir, &Size, true );
     ptr = buffer;
@@ -743,370 +963,248 @@ void DoomLevel::LoadHexenInfo ()
         }
     } while ( ptr && *ptr );
 
-    delete buffer;
+    delete [] buffer;
+
+    return true;
 }
 
 void DoomLevel::AddToWAD ( WAD *m_Wad )
 {
-    m_Wad->InsertAfter (( const wLumpName * ) Name (), m_MapDataSize, m_MapData, false );
+    FUNCTION_ENTRY ( this, "DoomLevel::AddToWAD", true );
 
-    ULONG size1, size2;
-    if ( m_NewFormat ) {
-        size1 = m_NoThings * sizeof ( wThing2 );
-        size2 = m_NoLineDefs * sizeof ( wLineDef2 );
-    } else {
-        size1 = m_NoThings * sizeof ( wThing1 );
-        size2 = m_NoLineDefs * sizeof ( wLineDef1 );
+    // Make sure data is in little endian when writing to the file
+    AdjustByteOrder ( LITTLE_ENDIAN );
+
+    StoreThings ();
+    StoreLineDefs ();
+
+    m_Wad->InsertAfter (( const wLumpName * ) Name (),    m_Map.dataSize,       m_Map.rawData,       false );
+    m_Wad->InsertAfter (( const wLumpName * ) "THINGS",   m_Thing.dataSize,     m_Thing.rawData,     false );
+    m_Wad->InsertAfter (( const wLumpName * ) "LINEDEFS", m_LineDef.dataSize,   m_LineDef.rawData,   false );
+    m_Wad->InsertAfter (( const wLumpName * ) "SIDEDEFS", m_SideDef.dataSize,   m_SideDef.rawData,   false );
+    m_Wad->InsertAfter (( const wLumpName * ) "VERTEXES", m_Vertex.dataSize,    m_Vertex.rawData,    false );
+    m_Wad->InsertAfter (( const wLumpName * ) "SEGS",     m_Segs.dataSize,      m_Segs.rawData,      false );
+    m_Wad->InsertAfter (( const wLumpName * ) "SSECTORS", m_SubSector.dataSize, m_SubSector.rawData, false );
+    m_Wad->InsertAfter (( const wLumpName * ) "NODES",    m_Node.dataSize,      m_Node.rawData,      false );
+    m_Wad->InsertAfter (( const wLumpName * ) "SECTORS",  m_Sector.dataSize,    m_Sector.rawData,    false );
+    m_Wad->InsertAfter (( const wLumpName * ) "REJECT",   m_Reject.dataSize,    m_Reject.rawData,    false );
+    m_Wad->InsertAfter (( const wLumpName * ) "BLOCKMAP", m_BlockMap.dataSize,  m_BlockMap.rawData,  false );
+
+    if (( m_IsHexen == true ) && ( m_Behavior.rawData != NULL )) {
+        m_Wad->InsertAfter (( const wLumpName * ) "BEHAVIOR", m_Behavior.dataSize,  m_Behavior.rawData,  false );
     }
 
-#if defined ( BIG_ENDIAN )
-    AdjustByteOrder ();
-#endif
-
-    m_Wad->InsertAfter (( const wLumpName * ) "THINGS",   size1, m_RawThing, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "LINEDEFS", size2, m_RawLineDef, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "SIDEDEFS", m_NoSideDefs * sizeof ( wSideDef ), m_SideDef, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "VERTEXES", m_NoVertices * sizeof ( wVertex ), m_Vertex, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "SEGS",     m_NoSegs * sizeof ( wSegs ), m_Segs, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "SSECTORS", m_NoSubSectors * sizeof ( wSSector ), m_SubSector, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "NODES",    m_NoNodes * sizeof ( wNode ), m_Node, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "SECTORS",  m_NoSectors * sizeof ( wSector ), m_Sector, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "REJECT",   m_RejectSize, m_Reject, false );
-    m_Wad->InsertAfter (( const wLumpName * ) "BLOCKMAP", m_BlockMapSize, m_BlockMap, false );
-
-#if defined ( BIG_ENDIAN )
-    AdjustByteOrder ();
-#endif
-
-    if ( m_NewFormat ) {
-        const wadDirEntry *dir;
-        const wadDirEntry *start = m_Wad->FindDir ( Name ());
-        const wadDirEntry *end = start + 11;
-        dir = m_Wad->FindDir ( "BEHAVIOR", start, end );
-        if ( dir != NULL ) {
-            ULONG size;
-            void *ptr = m_Wad->ReadEntry ( dir, &size );
-            m_Wad->InsertAfter (( const wLumpName * ) "BEHAVIOR", size, ptr, true );
-        }
-    }
+    // Switch back to native byte ordering
+    AdjustByteOrder ( BYTE_ORDER );
 }
 
-bool DoomLevel::SaveThings ( const wadDirEntry *start, const wadDirEntry *end )
+void DoomLevel::StoreThings ()
 {
-    bool changed;
-    const wadDirEntry *dir = m_Wad->FindDir ( "THINGS", start, end );
-    if ( m_RawThing ) delete [] m_RawThing;
-    if ( m_NewFormat ) {
-        m_RawThing = new char [ sizeof ( wThing2 ) * m_NoThings ];
-        ConvertThingToRaw2 ( m_NoThings, m_Thing, ( wThing2 * ) m_RawThing );
-        changed = m_Wad->WriteEntry ( dir, m_NoThings * sizeof ( wThing2 ), m_RawThing, false );
-    } else {
-        m_RawThing = new char [ sizeof ( wThing1 ) * m_NoThings ];
-        ConvertThingToRaw1 ( m_NoThings, m_Thing, ( wThing1 * ) m_RawThing );
-        changed = m_Wad->WriteEntry ( dir, m_NoThings * sizeof ( wThing1 ), m_RawThing, false );
+    FUNCTION_ENTRY ( this, "DoomLevel::StoreThings", true );
+
+    AdjustByteOrderThing ( LITTLE_ENDIAN );
+
+    if (( int ) m_Thing.dataSize < ThingCount () * m_Thing.elementSize ) {
+        delete [] ( char * ) m_Thing.rawData;
+        m_Thing.rawData = new char [ ThingCount () * m_Thing.elementSize ];
     }
-    return changed;
+
+    if ( m_IsHexen == false ) {
+        ConvertThingToRaw1 ( ThingCount (), m_ThingData, ( wThing1 * ) m_Thing.rawData );
+    } else {
+        ConvertThingToRaw2 ( ThingCount (), m_ThingData, ( wThing2 * ) m_Thing.rawData );
+    }
+
+    m_LineDef.dataSize = ThingCount () * m_LineDef.elementSize;
 }
 
-bool DoomLevel::SaveLineDefs ( const wadDirEntry *start, const wadDirEntry *end )
+void DoomLevel::StoreLineDefs ()
 {
-    bool changed;
-    const wadDirEntry *dir = m_Wad->FindDir ( "LINEDEFS", start, end );
-    if ( m_RawLineDef ) delete [] m_RawLineDef;
-    if ( m_NewFormat ) {
-        m_RawLineDef = new char [ sizeof ( wLineDef2 ) * m_NoLineDefs ];
-        ConvertLineDefToRaw2 ( m_NoLineDefs, m_LineDef, ( wLineDef2 * ) m_RawLineDef );
-        changed = m_Wad->WriteEntry ( dir, m_NoLineDefs * sizeof ( wLineDef2 ), m_RawLineDef, false );
-    } else {
-        m_RawLineDef = new char [ sizeof ( wLineDef1 ) * m_NoLineDefs ];
-        ConvertLineDefToRaw1 ( m_NoLineDefs, m_LineDef, ( wLineDef1 * ) m_RawLineDef );
-        changed = m_Wad->WriteEntry ( dir, m_NoLineDefs * sizeof ( wLineDef1 ), m_RawLineDef, false );
+    FUNCTION_ENTRY ( this, "DoomLevel::StoreLineDefs", true );
+
+    AdjustByteOrderLineDef ( LITTLE_ENDIAN );
+
+    if (( int ) m_LineDef.dataSize < LineDefCount () * m_LineDef.elementSize ) {
+        delete [] ( char * ) m_LineDef.rawData;
+        m_LineDef.rawData = new char [ LineDefCount () * m_LineDef.elementSize ];
     }
+
+    if ( m_IsHexen == false ) {
+        ConvertLineDefToRaw1 ( LineDefCount (), m_LineDefData, ( wLineDef1 * ) m_LineDef.rawData );
+    } else {
+        ConvertLineDefToRaw2 ( LineDefCount (), m_LineDefData, ( wLineDef2 * ) m_LineDef.rawData );
+    }
+
+    m_LineDef.dataSize = LineDefCount () * m_LineDef.elementSize;
+}
+
+bool DoomLevel::UpdateEntry ( sLevelLump *lump, const char *name, const char *follows, bool required )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::UpdateEntry", true );
+
+    if ( lump->changed == false ) return false;
+
+    lump->changed = false;
+
+    const wadDirEntry *start = m_Wad->FindDir ( Name ());
+    const wadDirEntry *end   = start + min ( 10, ( int ) ( m_Wad->DirSize () - 1 ));
+
+    bool changed = false;
+
+    const wadDirEntry *dir = m_Wad->FindDir ( name, start, end );
+    if ( dir == NULL ) {
+        if ( required == true ) {
+            fprintf ( stderr, "Map %s is missing required lump: %s\n", Name (), name );
+        } else {
+            const wadDirEntry *last = m_Wad->FindDir ( follows, start, end );
+            changed |= m_Wad->InsertAfter (( const wLumpName * ) name, lump->dataSize, lump->rawData, false, last );
+        }
+    } else {
+        changed |= m_Wad->WriteEntry ( dir, lump->dataSize, lump->rawData, false );
+    }
+
     return changed;
 }
 
 bool DoomLevel::UpdateWAD ()
 {
-    if (( m_Wad == NULL ) || ( ! m_Modified )) return false;
-    
-    const wadDirEntry *start = m_Wad->FindDir ( Name ());
-    const wadDirEntry *end = start + min ( 10, m_Wad->DirSize () - 1 );
+    FUNCTION_ENTRY ( this, "DoomLevel::UpdateWAD", true );
 
-    if ( start == NULL ) return false;
-    start += 1;
+    if ( m_Wad == NULL ) return false;
+    if ( m_Wad->FindDir ( Name ()) == NULL ) return false;
+    if ( IsDirty () == false ) return false;
 
-    const wadDirEntry *dir;
+    // Make sure data is in little endian when writing to the file
+    AdjustByteOrder ( LITTLE_ENDIAN );
+
+    StoreThings ();
+    StoreLineDefs ();
 
     bool changed = false;
 
-    if ( m_ThingsChanged ) {
-        m_ThingsChanged = false;
-        changed |= SaveThings ( start, end );
-    }
-    if ( m_LineDefsChanged ) {
-        m_LineDefsChanged = false;
-        changed |= SaveLineDefs ( start, end );
-    }
-    if ( m_SideDefsChanged ) {
-        m_SideDefsChanged = false;
-        dir = m_Wad->FindDir ( "SIDEDEFS", start, end );
-        if ( dir == NULL ) {
-            fprintf ( stderr, "Invalid map - no SIDEDEFS!\n" );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_NoSideDefs * sizeof ( wSideDef ), m_SideDef, false );
-        }
-    }
-    if ( m_VerticesChanged ) {
-        m_VerticesChanged = false;
-        dir = m_Wad->FindDir ( "VERTEXES", start, end );
-        if ( dir == NULL ) {
-            fprintf ( stderr, "Invalid map - no SIDEDEFS!\n" );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_NoVertices * sizeof ( wVertex ), m_Vertex, false );
-        }
-    }
-    if ( m_SegsChanged ) {
-        m_SegsChanged = false;
-        dir = m_Wad->FindDir ( "SEGS", start, end );
-        if ( dir == NULL ) {
-            const wadDirEntry *last = m_Wad->FindDir ( "VERTEXES", start, end );
-            changed |= m_Wad->InsertAfter (( const wLumpName * ) "SEGS", m_NoSegs * sizeof ( wSegs ), m_Segs, false, last );
-            start = m_Wad->FindDir ( Name ());
-            end = start + min ( 10, m_Wad->DirSize () - 1 );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_NoSegs * sizeof ( wSegs ), m_Segs, false );
-        }
-    }
-    if ( m_SubSectorsChanged ) {
-        m_SubSectorsChanged = false;
-        dir = m_Wad->FindDir ( "SSECTORS", start, end );
-        if ( dir == NULL ) {
-            const wadDirEntry *last = m_Wad->FindDir ( "SEGS", start, end );
-            changed |= m_Wad->InsertAfter (( const wLumpName * ) "SSECTORS", m_NoSubSectors * sizeof ( wSSector ), m_SubSector, false, last );
-            start = m_Wad->FindDir ( Name ());
-            end = start + min ( 10, m_Wad->DirSize () - 1 );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_NoSubSectors * sizeof ( wSSector ), m_SubSector, false );
-        }
-    }
-    if ( m_NodesChanged ) {
-        m_NodesChanged = false;
-        dir = m_Wad->FindDir ( "NODES", start, end );
-        if ( dir == NULL ) {
-            const wadDirEntry *last = m_Wad->FindDir ( "SSECTORS", start, end );
-            changed |= m_Wad->InsertAfter (( const wLumpName * ) "NODES", m_NoNodes * sizeof ( wNode ), m_Node, false, last );
-            start = m_Wad->FindDir ( Name ());
-            end = start + min ( 10, m_Wad->DirSize () - 1 );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_NoNodes * sizeof ( wNode ), m_Node, false );
-        }
-    }
-    if ( m_SectorsChanged ) {
-        m_SectorsChanged = false;
-        dir = m_Wad->FindDir ( "SECTORS", start, end );
-        if ( dir == NULL ) {
-            const wadDirEntry *last = m_Wad->FindDir ( "NODES", start, end );
-            changed |= m_Wad->InsertAfter (( const wLumpName * ) "SECTORS", m_NoSectors * sizeof ( wSector ), m_Sector, false, last );
-            start = m_Wad->FindDir ( Name ());
-            end = start + min ( 10, m_Wad->DirSize () - 1 );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_NoSectors * sizeof ( wSector ), m_Sector, false );
-        }
+    changed |= UpdateEntry ( &m_Thing,       "THINGS",        NULL,  true );
+    changed |= UpdateEntry ( &m_LineDef,   "LINEDEFS",        NULL,  true );
+    changed |= UpdateEntry ( &m_SideDef,   "SIDEDEFS",        NULL,  true );
+    changed |= UpdateEntry ( &m_Vertex,    "VERTEXES",        NULL,  true );
+    changed |= UpdateEntry ( &m_Segs,          "SEGS",  "VERTEXES", false );
+    changed |= UpdateEntry ( &m_SubSector, "SSECTORS",      "SEGS", false );
+    changed |= UpdateEntry ( &m_Node,         "NODES",  "SSECTORS", false );
+    changed |= UpdateEntry ( &m_Sector,     "SECTORS",     "NODES", false );
+    changed |= UpdateEntry ( &m_Reject,      "REJECT",   "SECTORS", false );
+    changed |= UpdateEntry ( &m_BlockMap,  "BLOCKMAP",    "REJECT", false );
+
+    if (( m_IsHexen == true ) && ( m_Behavior.rawData != NULL )) {
+        changed |= UpdateEntry ( &m_Behavior,  "BEHAVIOR", "BLOCKMAP", false );
     }
 
-    if ( m_RejectChanged ) {
-        m_RejectChanged = false;
-        dir = m_Wad->FindDir ( "REJECT", start, end );
-        if ( dir == NULL ) {
-            const wadDirEntry *last = m_Wad->FindDir ( "SECTORS", start, end );
-            changed |= m_Wad->InsertAfter (( const wLumpName * ) "REJECT", m_RejectSize, m_Reject, false, last );
-            start = m_Wad->FindDir ( Name ());
-            end = start + min ( 10, m_Wad->DirSize () - 1 );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_RejectSize, m_Reject, false );
-        }
-    }
-
-    if ( m_BlockMapChanged ) {
-        m_BlockMapChanged = false;
-        dir = m_Wad->FindDir ( "BLOCKMAP", start, end );
-        if ( dir == NULL ) {
-            const wadDirEntry *last = m_Wad->FindDir ( "REJECT", start, end );
-            changed |= m_Wad->InsertAfter (( const wLumpName * ) "BLOCKMAP", m_BlockMapSize, m_BlockMap, false, last );
-        } else {
-            changed |= m_Wad->WriteEntry ( dir, m_BlockMapSize, m_BlockMap, false );
-        }
-    }
+    // Switch back to native byte ordering
+    AdjustByteOrder ( BYTE_ORDER );
 
     return changed;
 }
 
+void DoomLevel::NewEntry ( sLevelLump *entry, int newCount, void *newData )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::NewEntry", true );
+
+    delete [] ( char * ) entry->rawData;
+
+    entry->byteOrder    = BYTE_ORDER;
+    entry->changed      = true;
+    entry->elementCount = newCount;
+    entry->dataSize     = newCount * entry->elementSize;
+    entry->rawData      = newData;
+}
+
 void DoomLevel::NewThings ( int newCount, wThing *newData )
 {
-    if ( m_Thing && newData && ( newCount == m_NoThings ) &&
-         ( memcmp ( newData, m_Thing, sizeof ( wThing ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_ThingsChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewThings", true );
 
-    if ( m_RawThing ) delete m_RawThing;////FIX ME
-    m_RawThing = NULL;
+    delete [] ( char * ) m_ThingData;
 
-    if ( m_Thing ) delete m_Thing;
-    m_Thing = newData;
-    m_NoThings = newCount;
+    m_ThingData = newData;
+
+    m_Thing.byteOrder    = BYTE_ORDER;
+    m_Thing.changed      = true;
+    m_Thing.elementCount = newCount;
 }
 
 void DoomLevel::NewLineDefs ( int newCount, wLineDef *newData )
 {
-    if ( m_LineDef && newData && ( newCount == m_NoLineDefs ) &&
-         ( memcmp ( newData, m_LineDef, sizeof ( wLineDef ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_LineDefsChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewLineDefs", true );
 
-    if ( m_RawLineDef ) delete m_RawLineDef;////FIX ME
-    m_RawLineDef = NULL;
+    delete [] ( char * ) m_LineDefData;
 
-    if ( m_LineDef ) delete m_LineDef;
-    m_LineDef = newData;
-    m_NoLineDefs = newCount;
+    m_LineDefData = newData;
+
+    m_LineDef.byteOrder    = BYTE_ORDER;
+    m_LineDef.changed      = true;
+    m_LineDef.elementCount = newCount;
 }
 
 void DoomLevel::NewSideDefs ( int newCount, wSideDef *newData )
 {
-    if ( m_SideDef && newData && ( newCount == m_NoSideDefs ) &&
-         ( memcmp ( newData, m_SideDef, sizeof ( wSideDef ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_SideDefsChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewSideDefs", true );
 
-    if ( m_SideDef ) delete m_SideDef;
-    m_SideDef = newData;
-    m_NoSideDefs = newCount;
+    NewEntry ( &m_SideDef, newCount, newData );
 }
 
 void DoomLevel::NewVertices ( int newCount, wVertex *newData )
 {
-    if ( m_Vertex && newData && ( newCount == m_NoVertices ) &&
-         ( memcmp ( newData, m_Vertex, sizeof ( wVertex ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_VerticesChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewVertices", true );
 
-    if ( m_Vertex ) delete m_Vertex;
-    m_Vertex = newData;
-    m_NoVertices = newCount;
+    NewEntry ( &m_Vertex, newCount, newData );
 }
 
 void DoomLevel::NewSectors ( int newCount, wSector *newData )
 {
-    if ( m_Sector && newData && ( newCount == m_NoSectors ) &&
-         ( memcmp ( newData, m_Sector, sizeof ( wSector ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_SectorsChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewSectors", true );
 
-    if ( m_Sector ) delete m_Sector;
-    m_Sector = newData;
-    m_NoSectors = newCount;
+    NewEntry ( &m_Sector, newCount, newData );
 }
 
 void DoomLevel::NewSegs ( int newCount, wSegs *newData )
 {
-    if ( m_Segs && newData && ( newCount == m_NoSegs ) &&
-         ( memcmp ( newData, m_Segs, sizeof ( wSegs ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_SegsChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewSegs", true );
 
-    if ( m_Segs ) delete m_Segs;
-    m_Segs = newData;
-    m_NoSegs = newCount;
+    NewEntry ( &m_Segs, newCount, newData );
 }
 
 void DoomLevel::NewSubSectors ( int newCount, wSSector *newData )
 {
-    if ( m_SubSector && newData && ( newCount == m_NoSubSectors ) &&
-         ( memcmp ( newData, m_SubSector, sizeof ( wSSector ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_SubSectorsChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewSubSectors", true );
 
-    if ( m_SubSector ) delete m_SubSector;
-    m_SubSector = newData;
-    m_NoSubSectors = newCount;
+    NewEntry ( &m_SubSector, newCount, newData );
 }
 
 void DoomLevel::NewNodes ( int newCount, wNode *newData )
 {
-    if ( m_Node && newData && ( newCount == m_NoNodes ) &&
-         ( memcmp ( newData, m_Node, sizeof ( wNode ) * newCount ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_NodesChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewNodes", true );
 
-    if ( m_Node ) delete m_Node;
-    m_Node = newData;
-    m_NoNodes = newCount;
+    NewEntry ( &m_Node, newCount, newData );
 }
 
-void DoomLevel::NewReject ( int newSize, wReject *newData, bool saveBits )
+void DoomLevel::NewReject ( int newSize, UINT8 *newData )
 {
-    int mask = ( 0xFF00 >> ( m_RejectSize * 8 - m_NoSectors * m_NoSectors )) & 0xFF;
-    int maskData = ( m_Reject != NULL ) ? (( UCHAR * ) m_Reject ) [ m_RejectSize -1 ] & mask : 0;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewReject", true );
 
-    if ( m_Reject && newData && ( newSize == m_RejectSize ) &&
-         ( memcmp ( newData, m_Reject, newSize - 1 ) == 0 )) {
-        UCHAR oldTail = (( UCHAR * ) m_Reject ) [ m_RejectSize - 1 ];
-        UCHAR newTail = (( UCHAR * ) newData ) [ m_RejectSize - 1 ];
-        if (( oldTail & ~mask ) == ( newTail & ~mask )) {
-            if (( saveBits == true ) || ( oldTail == newTail )) {
-                delete newData;
-                return;
-            }
-        }
-    }
-    m_Modified = true;
-    m_RejectChanged = true;
+    int mask = ( 0xFF >> ( newSize * 8 - SectorCount () * SectorCount ())) & 0xFF;
 
-    if ( m_Reject ) delete m_Reject;
-    m_Reject = newData;
-    m_RejectSize = newSize;
+    newData [ newSize - 1 ] &= ( UINT8 ) mask;
 
-    if ( saveBits ) {
-        (( UCHAR * ) m_Reject ) [ m_RejectSize - 1 ] &= ( UCHAR ) ~mask;
-        (( UCHAR * ) m_Reject ) [ m_RejectSize - 1 ] |= ( UCHAR ) maskData;
-    }
+    NewEntry ( &m_Reject, newSize, newData );
 }
 
 void DoomLevel::NewBlockMap ( int newSize, wBlockMap *newData )
 {
-    if ( m_BlockMap && newData && ( newSize == m_BlockMapSize ) &&
-         ( memcmp ( newData, m_BlockMap, newSize ) == 0 )) {
-        delete newData;
-        return;
-    }
-    m_Modified = true;
-    m_BlockMapChanged = true;
+    FUNCTION_ENTRY ( this, "DoomLevel::NewBlockMap", true );
 
-    if ( m_BlockMap ) delete m_BlockMap;
-    m_BlockMap = newData;
-    m_BlockMapSize = newSize;
+    NewEntry ( &m_BlockMap, newSize, newData );
+}
+
+void DoomLevel::NewBehavior ( int newSize, char *newData )
+{
+    FUNCTION_ENTRY ( this, "DoomLevel::NewBehavior", true );
+
+    NewEntry ( &m_Behavior, newSize, newData );
 }

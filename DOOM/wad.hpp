@@ -6,7 +6,7 @@
 //
 // Description: Object classes for manipulating Doom WAD files
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -28,10 +28,10 @@
 //
 //----------------------------------------------------------------------------
 
-#if ! defined ( _WAD_HPP_ )
-#define _WAD_HPP_
+#ifndef WAD_HPP_
+#define WAD_HPP_
 
-#if ! defined ( _COMMON_HPP_ )
+#if ! defined ( COMMON_HPP_ )
     #include "common.hpp"
 #endif
 
@@ -39,18 +39,18 @@
     #include <stdio.h>
 #endif
 
-#if defined ( LITTLE_ENDIAN )
-    #define IWAD_ID		0x44415749	// ASCII - 'IWAD'
-    #define PWAD_ID		0x44415750	// ASCII - 'PWAD'
+#if ( BYTE_ORDER == LITTLE_ENDIAN )
+    const UINT32 IWAD_ID		= 0x44415749;	// ASCII - 'IWAD'
+    const UINT32 PWAD_ID		= 0x44415750;	// ASCII - 'PWAD'
 #else
-    #define IWAD_ID		0x49574144	// ASCII - 'IWAD'
-    #define PWAD_ID		0x50574144	// ASCII - 'PWAD'
+    const UINT32 IWAD_ID		= 0x49574144;	// ASCII - 'IWAD'
+    const UINT32 PWAD_ID		= 0x50574144;	// ASCII - 'PWAD'
 
-    extern ULONG swap_ulong ( const unsigned char *ptr );
-    extern ULONG swap_ushort ( const unsigned char *ptr );
+    extern UINT32 swap_uint32 ( const unsigned char *ptr );
+    extern UINT16 swap_uint16 ( const unsigned char *ptr );
 #endif
 
-#define IS_TYPE(x,y)	(( * ( ULONG * ) ( x )) == ( y ))
+#define IS_TYPE(x,y)	(( * ( UINT32 * ) ( x )) == (( UINT32 ) y ))
 
 #define MAX_LUMP_NAME	8
 
@@ -108,22 +108,22 @@ enum eWadStatus {
 };
 
 struct wadHeader {
-    char   type [4];
-    ULONG  dirSize;			// number of Lumps in WAD
-    ULONG  dirStart;			// offset to start of directory
+    char    type [4];
+    UINT32  dirSize;			// number of Lumps in WAD
+    UINT32  dirStart;			// offset to start of directory
 };
 
 typedef char wLumpName [ MAX_LUMP_NAME ];
 
 struct wadDirEntry {
-    ULONG     offset;			// offset to start of data
-    ULONG     size;			// byte size of data
+    UINT32     offset;			// offset to start of data
+    UINT32     size;			// byte size of data
     wLumpName name;			// name of data block
 };
 
 struct wadDirInfo {
-    UCHAR    *cacheData;
-    UCHAR    *newData;
+    UINT8    *cacheData;
+    UINT8    *newData;
     eLumpType type;
 };
 
@@ -132,10 +132,10 @@ class wadList;
 class wadFilter {
 public:
     virtual const char *getFileSpec () const = 0;
-    virtual bool isRecognized ( ULONG, void * ) const = 0;
+    virtual bool isRecognized ( UINT32, void * ) const = 0;
     virtual bool isRecognized ( const char * ) const = 0;
-    virtual bool readData ( FILE *, ULONG *, void ** ) const = 0;
-    virtual bool writeData ( FILE *, ULONG, void * ) const = 0;
+    virtual bool readData ( FILE *, UINT32 *, void ** ) const = 0;
+    virtual bool writeData ( FILE *, UINT32, void * ) const = 0;
 };
 
 class WAD {
@@ -183,7 +183,7 @@ class WAD {
     bool ReadDirectory ();
     bool WriteDirectory ( FILE * );
 
-    ULONG IndexOf ( const wadDirEntry * ) const;
+    UINT32 IndexOf ( const wadDirEntry * ) const;
 
 public:
 
@@ -203,14 +203,14 @@ public:
 
     void Type ( eWadType );
     void Style ( eWadStyle );
-    void Format ( ULONG );
+    void Format ( UINT32 );
 
     const char *Name () const;
     eWadStatus  Status () const;
     eWadType    Type () const;
     eWadStyle   Style () const;
-    ULONG       Format () const;
-    ULONG       FileSize () const;
+    UINT32      Format () const;
+    UINT32      FileSize () const;
 
     bool     IsValid () const;
     bool     IsRegistered () const;
@@ -221,39 +221,40 @@ public:
     const char *GetLumpDescription ( eLumpType ) const;
     const char *GetLumpDescription ( const wadDirEntry * );
 
-    void Seek ( ULONG );
-    void ReadBytes ( void *, ULONG, ULONG = 1 );
-    void WriteBytes ( void *, ULONG, ULONG = 1 );
-    void CopyBytes ( WAD *, ULONG, ULONG = 1 );
+    void Seek ( UINT32 );
+    void ReadBytes ( void *, UINT32, UINT32 = 1 );
+    void WriteBytes ( void *, UINT32, UINT32 = 1 );
+    void CopyBytes ( WAD *, UINT32, UINT32 = 1 );
 
-    ULONG DirSize () const;
-    const wadDirEntry *GetDir ( ULONG ) const;
+    UINT32 DirSize () const;
+
+    const wadDirEntry *GetDir ( UINT32 ) const;
     const wadDirEntry *FindDir ( const char *, const wadDirEntry * = NULL, const wadDirEntry * = NULL ) const;
 
-    void *ReadEntry ( const char *, ULONG *, const wadDirEntry * = NULL, const wadDirEntry * = NULL, bool = false );
-    void *ReadEntry ( const wadDirEntry *, ULONG *, bool = false );
+    void *ReadEntry ( const char *, UINT32 *, const wadDirEntry * = NULL, const wadDirEntry * = NULL, bool = false );
+    void *ReadEntry ( const wadDirEntry *, UINT32 *, bool = false );
 
-    bool WriteEntry ( const char *, ULONG, void *, bool, const wadDirEntry * = NULL, const wadDirEntry * = NULL );
-    bool WriteEntry ( const wadDirEntry *, ULONG, void *, bool );
+    bool WriteEntry ( const char *, UINT32, void *, bool, const wadDirEntry * = NULL, const wadDirEntry * = NULL );
+    bool WriteEntry ( const wadDirEntry *, UINT32, void *, bool );
 
     bool Extract ( const wLumpName *, const char * = NULL ) const;
 
     bool InsertBefore ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
     bool InsertAfter ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
 
-    bool InsertBefore ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
-    bool InsertAfter ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
+    bool InsertBefore ( const wLumpName *, UINT32, void *, bool, const wadDirEntry * = NULL );
+    bool InsertAfter ( const wLumpName *, UINT32, void *, bool, const wadDirEntry * = NULL );
 
     bool Remove ( const wLumpName *, const wadDirEntry * = NULL, const wadDirEntry * = NULL  );
 };
 
-inline void WAD::Format ( ULONG newFormat )     { * ( ULONG * ) m_Header.type = newFormat; }
+inline void WAD::Format ( UINT32 newFormat )    { * ( UINT32 * ) m_Header.type = newFormat; }
 inline void WAD::Type ( eWadType newType )      { m_Type = newType; }
 inline void WAD::Style ( eWadStyle newStyle )   { m_Style = newStyle; }
 
 inline const char *WAD::Name () const           { return m_Name; }
-inline ULONG       WAD::DirSize () const        { return m_Header.dirSize; }
-inline ULONG       WAD::Format () const         { return * ( ULONG * ) m_Header.type; }
+inline UINT32      WAD::DirSize () const        { return m_Header.dirSize; }
+inline UINT32      WAD::Format () const         { return * ( UINT32 * ) m_Header.type; }
 inline eWadStatus  WAD::Status () const         { return m_Status; }
 inline eWadType    WAD::Type () const           { return m_Type; }
 inline eWadStyle   WAD::Style () const          { return m_Style; }
@@ -272,16 +273,16 @@ class wadList {
         wadListEntry *Next;
     };
 
-    ULONG            m_DirSize;
-    ULONG            m_MaxSize;
+    UINT32           m_DirSize;
+    UINT32           m_MaxSize;
     wadListDirEntry *m_Directory;
     eWadType         m_Type;
     eWadStyle        m_Style;
     wadListEntry    *m_List;
 
-    ULONG  IndexOf ( const wadListDirEntry * ) const;
+    UINT32  IndexOf ( const wadListDirEntry * ) const;
 
-    int    AddLevel ( ULONG, const wadDirEntry *&, WAD * );
+    int    AddLevel ( UINT32, const wadDirEntry *&, WAD * );
     void   AddDirectory ( WAD *, bool = true );
 
 public:
@@ -294,8 +295,8 @@ public:
     void Clear ();
     void UpdateDirectory ();
 
-    int   wadCount () const;
-    ULONG FileSize () const;
+    int wadCount () const;
+    UINT32 FileSize () const;
     WAD *GetWAD ( int ) const;
     eWadType Type () const;
     eWadStyle Style () const;
@@ -303,8 +304,9 @@ public:
     bool Save ( const char * = NULL );
     bool Extract ( const wLumpName *, const char *file = NULL );
 
-    ULONG DirSize () const;
-    const wadListDirEntry *GetDir ( ULONG ) const;
+    UINT32 DirSize () const;
+
+    const wadListDirEntry *GetDir ( UINT32 ) const;
     const wadListDirEntry *FindWAD ( const char *, const wadListDirEntry * = NULL, const wadListDirEntry * = NULL ) const;
 
     bool Contains ( WAD * ) const;
@@ -312,7 +314,7 @@ public:
     bool HasChanged () const;
 };
 
-inline ULONG     wadList::DirSize () const	{ return m_DirSize; }
+inline UINT32    wadList::DirSize () const	{ return m_DirSize; }
 inline bool      wadList::IsEmpty () const	{ return ( m_List == NULL ) ? true : false; }
 inline eWadType  wadList::Type () const		{ return m_Type; }
 inline eWadStyle wadList::Style () const	{ return m_Style; }

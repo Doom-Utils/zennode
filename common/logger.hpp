@@ -6,7 +6,7 @@
 //
 // Description: Error Logger object header
 //
-// Copyright (c) 1998-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1998-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -26,8 +26,8 @@
 //
 //----------------------------------------------------------------------------
 
-#ifndef _LOGGER_HPP_
-#define _LOGGER_HPP_
+#ifndef LOGGER_HPP_
+#define LOGGER_HPP_
 
 #ifdef ERROR
     #undef ERROR
@@ -47,48 +47,34 @@
     #define FUNCTION_ENTRY(t,f,l)					\
         void *l_pThis  = ( void * ) t;					\
         char *l_FnName = f;						\
-        if ( l && g_LogFlags.FunctionEntry ) {				\
+        bool l_log = ( g_LogFlags.FunctionEntry == l ) ? true : false;  \
+        if ( l_log && g_LogFlags.FunctionEntry ) {			\
             DBG_MINOR_TRACE2 ( l_FnName, l_pThis, "Function entered" );	\
         }
 
     #define ASSERT(x)                  (( ! ( x )) ? dbg_Assert ( dbg_FileName, __LINE__, l_FnName, l_pThis, #x ), 1 : 0 )
+    #define ASSERT_BOOL(x)             ASSERT ( x )
 
 #else
 
+    #if defined ( _MSC_VER )
+        #pragma warning ( disable: 4127 )    // C4127: conditional expression is constant
+    #endif
+
     #define FUNCTION_ENTRY(t,f,l)
     #define ASSERT(x)
+    #define ASSERT_BOOL(x)             0
 
 #endif
 
-#define TRACE(x) {							\
-        DBG_MAJOR_TRACE2 ( l_FnName, l_pThis, ( const char * ) x );		\
-    }
-
-#define MINOR_EVENT(x) {						\
-        DBG_MINOR_EVENT2 ( l_FnName, l_pThis, ( const char * ) x );		\
-    }
-
-#define MAJOR_EVENT(x) {						\
-        DBG_MAJOR_EVENT2 ( l_FnName, l_pThis, ( const char * ) x );		\
-    }
-
-#define EVENT   MINOR_EVENT
-    
-#define STATUS(x) {							\
-        DBG_STATUS2 ( l_FnName, l_pThis, ( const char * ) x );			\
-    }
-
-#define WARNING(x) {							\
-        DBG_WARNING2 ( l_FnName, l_pThis, ( const char * ) x );			\
-    }
-
-#define ERROR(x) {							\
-        DBG_ERROR2 ( l_FnName, l_pThis, ( const char * ) x );			\
-    }
-
-#define FATAL(x) {							\
-        DBG_FATAL2 ( l_FnName, l_pThis, ( const char * ) x );			\
-    }
+#define TRACE(x)        DBG_MAJOR_TRACE2 ( l_FnName, l_pThis, ( const char * ) x )
+#define EVENT(x)        DBG_MINOR_EVENT2 ( l_FnName, l_pThis, ( const char * ) x )
+#define MINOR_EVENT(x)  DBG_MINOR_EVENT2 ( l_FnName, l_pThis, ( const char * ) x )
+#define MAJOR_EVENT(x)  DBG_MAJOR_EVENT2 ( l_FnName, l_pThis, ( const char * ) x )
+#define STATUS(x)       DBG_STATUS2 ( l_FnName, l_pThis, ( const char * ) x )
+#define WARNING(x)      DBG_WARNING2 ( l_FnName, l_pThis, ( const char * ) x )
+#define ERROR(x)        DBG_ERROR2 ( l_FnName, l_pThis, ( const char * ) x )
+#define FATAL(x)        DBG_FATAL2 ( l_FnName, l_pThis, ( const char * ) x )
 
 #if ! defined ( DEBUG )
 
@@ -107,14 +93,14 @@
     #define DBG_WARNING(f,t,x)
     #define DBG_WARNING2(f,t,x)
     #define DBG_ERROR(f,t,x)
-    #define DBG_ERROR2(f,t,x)
+    #define DBG_ERROR2(f,t,x)          
     #define DBG_FATAL(f,t,x)
     #define DBG_FATAL2(f,t,x)
     #define DBG_ASSERT(f,t,x)          0
 
 #else
 
-    #define DBG_REGISTER(x)            static ULONG dbg_FileName = dbg_RegisterFile ( x );	
+    #define DBG_REGISTER(x)            static int dbg_FileName = dbg_RegisterFile ( x );	
     #define DBG_STRING(x)              x
     #define DBG_MINOR_TRACE(f,t,x)     dbg_Record ( _MINOR_TRACE_, dbg_FileName, __LINE__, f, t, x )
     #define DBG_MINOR_TRACE2(f,t,x)    dbg_Record ( _MINOR_TRACE_, dbg_FileName, __LINE__, f, t, dbg_Stream () << x ), dbg_Stream ().flush ()
@@ -163,9 +149,9 @@ public:
     operator const char * ();
     void flush ();
 
+    dbgString &operator << ( const char * );
     dbgString &operator << ( char );
     dbgString &operator << ( unsigned char );
-    dbgString &operator << ( const char * );
     dbgString &operator << ( short );
     dbgString &operator << ( unsigned short );
     dbgString &operator << ( int );
@@ -188,7 +174,7 @@ dbgString &dec ( dbgString & );
 extern "C" {
 
     dbgString  &dbg_Stream ();
-    ULONG       dbg_RegisterFile ( const char * );
+    int         dbg_RegisterFile ( const char * );
     void        dbg_Assert ( int, int, const char * , void *, const char * );
     void        dbg_Record ( int, int, int, const char *, void *, const char * );
 

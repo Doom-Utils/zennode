@@ -6,7 +6,7 @@
 //
 // Description: This module contains the logic for the BLOCKMAP builder.
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
 #include "common.hpp"
 #include "level.hpp"
 #include "ZenNode.hpp"
+#include "console.hpp"
 
 struct sBlockList {
     int     firstIndex;			// Index of 1st blockList element matching this one
@@ -40,8 +41,6 @@ struct sBlockList {
     int     count;
     int    *line;
 };
-
-extern void Status ( char * );
 
 void AddLineDef ( sBlockList *block, int line )
 {
@@ -198,25 +197,25 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
 
     Status ( "Saving BLOCKMAP ... " );
     int blockSize = sizeof ( wBlockMap ) +
-                    totalSize * sizeof ( SHORT ) +
-                    blockListSize * sizeof ( SHORT );
+                    totalSize * sizeof ( INT16 ) +
+                    blockListSize * sizeof ( INT16 );
     char *start = new char [ blockSize ];
     wBlockMap *blockMap = ( wBlockMap * ) start;
-    blockMap->xOrigin = ( SHORT ) xLeft;
-    blockMap->yOrigin = ( SHORT ) yBottom;
-    blockMap->noColumns = ( USHORT ) noCols;
-    blockMap->noRows = ( USHORT ) noRows;
+    blockMap->xOrigin   = ( INT16 ) xLeft;
+    blockMap->yOrigin   = ( INT16 ) yBottom;
+    blockMap->noColumns = ( UINT16 ) noCols;
+    blockMap->noRows    = ( UINT16 ) noRows;
 
     // Fill in data & offsets
-    SHORT *offset = ( SHORT * ) ( blockMap + 1 );
-    SHORT *data = offset + totalSize;
+    INT16 *offset = ( INT16 * ) ( blockMap + 1 );
+    INT16 *data   = offset + totalSize;
     for ( i = 0; i < totalSize; i++ ) {
         sBlockList *block = &blockList [i];
         if ( block->firstIndex == i ) {
-            block->offset = data - ( SHORT * ) start;
+            block->offset = data - ( INT16 * ) start;
             *data++ = 0;
             for ( int x = 0; x < block->count; x++ ) {
-                *data++ = ( SHORT ) block->line [x];
+                *data++ = ( INT16 ) block->line [x];
             }
             *data++ = -1;
         } else {
@@ -225,12 +224,12 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
     }
 
     for ( i = 0; i < totalSize; i++ ) {
-        offset [i] = ( SHORT ) blockList [i].offset;
+        offset [i] = ( INT16 ) blockList [i].offset;
         if ( blockList [i].line ) free ( blockList [i].line );
     }
-    delete blockList;
+    delete [] blockList;
 
     level->NewBlockMap ( blockSize, blockMap );
 
-    return savings * sizeof ( SHORT );
+    return savings * sizeof ( INT16 );
 }

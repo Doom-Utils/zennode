@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
-// File:        LineDef.hpp
+// File:        lineDef.hpp
 // Date:        23-August-1995
 // Programmer:  Marc Rousseau
 //
 // Description: Object classes for manipulating Doom Map LineDefs
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -26,15 +26,11 @@
 //
 //----------------------------------------------------------------------------
 
-#ifndef _LINEDEF_HPP_
-#define _LINEDEF_HPP_
+#ifndef LINEDEF_HPP_
+#define LINEDEF_HPP_
 
-#if ! defined ( _LEVEL_HPP_ )
+#if ! defined ( LEVEL_HPP_ )
     #include "level.hpp"
-#endif
-
-#ifndef SHORT
-    typedef short SHORT;
 #endif
 
 // WAD LINEDEF Flags
@@ -134,27 +130,27 @@ enum LD_LINE_EFFECTS {
     LDE_MODIFIER_MASK	= 0x000003FF
 };
 
-#define LDE_TX		LDE_TRIGGER_MODEL | LDE_TX_TEXTURE
-#define LDE_TXP		LDE_TRIGGER_MODEL | LDE_TX_TEXTURE | LDE_TX_SPECIAL
-#define LDE_NXP		LDE_NUMERIC_MODEL | LDE_TX_TEXTURE | LDE_TX_SPECIAL
-#define LDE_HE		LDE_MV_HIGHEST | LDE_MV_EXCLUSIVE
-#define LDE_HEF		LDE_MV_HIGHEST | LDE_MV_EXCLUSIVE | LDE_MV_FLOOR
-#define LDE_HEC		LDE_MV_HIGHEST | LDE_MV_EXCLUSIVE | LDE_MV_CEILING
-#define LDE_LE		LDE_MV_LOWEST | LDE_MV_EXCLUSIVE
-#define LDE_LEF		LDE_MV_LOWEST | LDE_MV_EXCLUSIVE | LDE_MV_FLOOR
-#define LDE_LIC		LDE_MV_LOWEST | LDE_MV_INCLUSIVE | LDE_MV_CEILING
-#define LDE_nhEF	LDE_MV_NEXT_HIGHEST | LDE_MV_EXCLUSIVE | LDE_MV_FLOOR
-#define LDE_F		LDE_MV_FLOOR
+#define LDE_TX		( LDE_TRIGGER_MODEL | LDE_TX_TEXTURE )
+#define LDE_TXP		( LDE_TRIGGER_MODEL | LDE_TX_TEXTURE | LDE_TX_SPECIAL )
+#define LDE_NXP		( LDE_NUMERIC_MODEL | LDE_TX_TEXTURE | LDE_TX_SPECIAL )
+#define LDE_HE		( LDE_MV_HIGHEST | LDE_MV_EXCLUSIVE )
+#define LDE_HEF		( LDE_MV_HIGHEST | LDE_MV_EXCLUSIVE | LDE_MV_FLOOR )
+#define LDE_HEC		( LDE_MV_HIGHEST | LDE_MV_EXCLUSIVE | LDE_MV_CEILING )
+#define LDE_LE		( LDE_MV_LOWEST | LDE_MV_EXCLUSIVE )
+#define LDE_LEF		( LDE_MV_LOWEST | LDE_MV_EXCLUSIVE | LDE_MV_FLOOR )
+#define LDE_LIC		( LDE_MV_LOWEST | LDE_MV_INCLUSIVE | LDE_MV_CEILING )
+#define LDE_nhEF	( LDE_MV_NEXT_HIGHEST | LDE_MV_EXCLUSIVE | LDE_MV_FLOOR )
+#define LDE_F		( LDE_MV_FLOOR )
 #define LDE_NUM(x)	((x) & LDE_MODIFIER_MASK )
 			
 struct sLineDefDesc {
-    SHORT       Type;
-    UCHAR       Class;
+    INT16       Type;
+    UINT8       Class;
     const char *Trigger;
-    UCHAR       Speed;
-    UCHAR       Duration;
-    UCHAR       Action;
-    ULONG       Effects;
+    UINT8       Speed;
+    UINT8       Duration;
+    UINT8       Action;
+    UINT32      Effects;
 
     const char *GetClass ();
     const char *GetDescription ();

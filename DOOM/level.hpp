@@ -6,7 +6,7 @@
 //
 // Description: Object classes for manipulating Doom Maps
 //
-// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -26,203 +26,185 @@
 //
 //----------------------------------------------------------------------------
 
-#ifndef _LEVEL_HPP_
-#define _LEVEL_HPP_
+#ifndef LEVEL_HPP_
+#define LEVEL_HPP_
 
-#if ! defined ( _COMMON_HPP_ )
+#if ! defined ( COMMON_HPP_ )
     #include "common.hpp"
 #endif
 
-#if ! defined ( _WAD_HPP_ )
+#if ! defined ( WAD_HPP_ )
     #include "wad.hpp"
 #endif
 
 #include "thing.hpp"
 #include "lineDef.hpp"
 
-#ifndef SHORT
-    typedef short SHORT;
-#endif
-
 struct wThing1 {
-    SHORT       xPos;                   // x position
-    SHORT       yPos;                   // y position
-    USHORT      angle;                  // direction
-    USHORT      type;                   // thing type
-    USHORT      attr;                   // attributes of thing
+    INT16       xPos;                   // x position
+    INT16       yPos;                   // y position
+    UINT16      angle;                  // direction
+    UINT16      type;                   // thing type
+    UINT16      attr;                   // attributes of thing
 };
 
 struct wThing2 {        // HEXEN
-    USHORT      tid;                    // Thing ID - for scripts & specials
-    SHORT       xPos;                   // x position
-    SHORT       yPos;                   // y position
-    USHORT      altitude;               // starting altitude
-    USHORT      angle;                  // direction
-    USHORT      type;                   // thing type
-    USHORT      attr;                   // attributes of thing
-    UCHAR       special;                // special type
-    UCHAR       arg [5];                // special arguments
+    UINT16      tid;                    // Thing ID - for scripts & specials
+    INT16       xPos;                   // x position
+    INT16       yPos;                   // y position
+    UINT16      altitude;               // starting altitude
+    UINT16      angle;                  // direction
+    UINT16      type;                   // thing type
+    UINT16      attr;                   // attributes of thing
+    UINT8       special;                // special type
+    UINT8       arg [5];                // special arguments
 };      
 
 struct wThing {
-    SHORT       xPos;                   // x position
-    SHORT       yPos;                   // y position
-    USHORT      angle;                  // in degrees not BAM
-    USHORT      type;                   // thing type
-    USHORT      attr;                   // attributes of thing
-    USHORT      tid;                    // Thing ID - for scripts & specials
-    USHORT      altitude;               // starting altitude
-    UCHAR       special;                // special type
-    UCHAR       arg [5];                // special arguments
+    INT16       xPos;                   // x position
+    INT16       yPos;                   // y position
+    UINT16      angle;                  // in degrees not BAM
+    UINT16      type;                   // thing type
+    UINT16      attr;                   // attributes of thing
+    UINT16      tid;                    // Thing ID - for scripts & specials
+    UINT16      altitude;               // starting altitude
+    UINT8       special;                // special type
+    UINT8       arg [5];                // special arguments
 };
 
 struct wLineDef1 {
-    USHORT      start;                  // from this vertex ...
-    USHORT      end;                    // ... to this vertex
-    USHORT      flags;
-    USHORT      type;
-    USHORT      tag;                    // crossing this linedef activates the sector with the same tag
-    USHORT      sideDef[2];             // sidedef
+    UINT16      start;                  // from this vertex ...
+    UINT16      end;                    // ... to this vertex
+    UINT16      flags;
+    UINT16      type;
+    UINT16      tag;                    // crossing this linedef activates the sector with the same tag
+    UINT16      sideDef[2];             // sidedef
 };
 
 struct wLineDef2 {      // HEXEN
-    USHORT      start;                  // from this vertex ...
-    USHORT      end;                    // ... to this vertex
-    USHORT      flags;
-    UCHAR       special;                // special type
-    UCHAR       arg [5];                // special arguments
-    USHORT      sideDef[2];             // sidedef
+    UINT16      start;                  // from this vertex ...
+    UINT16      end;                    // ... to this vertex
+    UINT16      flags;
+    UINT8       special;                // special type
+    UINT8       arg [5];                // special arguments
+    UINT16      sideDef[2];             // sidedef
 };
 
 struct wLineDef {
-    USHORT      start;                  // from this vertex ...
-    USHORT      end;                    // ... to this vertex
-    USHORT      flags;
-    USHORT      type;
-    USHORT      tag;                    // crossing this linedef activates the sector with the same tag
-    USHORT      sideDef[2];             // sidedef
-    UCHAR       special;                // special type
-    UCHAR       arg [5];                // special arguments
+    UINT16      start;                  // from this vertex ...
+    UINT16      end;                    // ... to this vertex
+    UINT16      flags;
+    UINT16      type;
+    UINT16      tag;                    // crossing this linedef activates the sector with the same tag
+    UINT16      sideDef[2];             // sidedef
+    UINT8       special;                // special type
+    UINT8       arg [5];                // special arguments
 };
 
-#define NO_SIDEDEF      (( USHORT ) -1 )
-#define RIGHT_SIDEDEF   (( USHORT )  0 )
-#define LEFT_SIDEDEF    (( USHORT )  1 )
+#define NO_SIDEDEF      (( UINT16 ) -1 )
+#define RIGHT_SIDEDEF   (( UINT16 )  0 )
+#define LEFT_SIDEDEF    (( UINT16 )  1 )
 
-#define EMPTY_TEXTURE   0x002D          // USHORT version of ASCII "-"
+#define EMPTY_TEXTURE   0x002D          // UINT16 version of ASCII "-"
 
 struct wSideDef {
-    SHORT       xOff;                   // X offset for texture
-    SHORT       yOff;                   // Y offset for texture
+    INT16       xOff;                   // X offset for texture
+    INT16       yOff;                   // Y offset for texture
     char        text1[MAX_LUMP_NAME];   // texture name for the part above
     char        text2[MAX_LUMP_NAME];   // texture name for the part below
     char        text3[MAX_LUMP_NAME];   // texture name for the regular part
-    USHORT      sector;                 // adjacent sector
+    UINT16      sector;                 // adjacent sector
 };
 
 struct wVertex {
-    SHORT       x;                      // X coordinate
-    SHORT       y;                      // Y coordinate
-};
-
-struct wSegs {
-    USHORT      start;                  // from this vertex ...
-    USHORT      end;                    // ... to this vertex
-    USHORT      angle;                  // angle (0 = east, 16384 = north, ...)
-    USHORT      lineDef;                // linedef that this seg goes along*/
-    USHORT      flip;                   // true if not the same direction as linedef
-    USHORT      offset;                 // distance from starting point
-};
-
-struct wSSector {
-    USHORT      num;                    // number of Segs in this Sub-Sector
-    USHORT      first;                  // first Seg
-};
-
-struct wBound {
-    SHORT       maxy, miny;
-    SHORT       minx, maxx;             // bounding rectangle
-};
-
-struct wNode {
-    SHORT       x, y;                   // starting point
-    SHORT       dx, dy;                 // offset to ending point
-    wBound      side[2];
-    USHORT      child[2];               // Node or SSector (if high bit is set)
+    INT16       x;                      // X coordinate
+    INT16       y;                      // Y coordinate
 };
 
 struct wSector {
-    SHORT       floorh;                 // floor height
-    SHORT       ceilh;                  // ceiling height
+    INT16       floorh;                 // floor height
+    INT16       ceilh;                  // ceiling height
     char        floorTexture[MAX_LUMP_NAME];    // floor texture
     char        ceilTexture[MAX_LUMP_NAME];     // ceiling texture
-    USHORT      light;                  // light level (0-255)
-    USHORT      special;                // special behaviour (0 = normal, 9 = secret, ...)
-    USHORT      trigger;                // sector activated by a linedef with the same tag
+    UINT16      light;                  // light level (0-255)
+    UINT16      special;                // special behaviour (0 = normal, 9 = secret, ...)
+    UINT16      trigger;                // sector activated by a linedef with the same tag
+};
+
+struct wSegs {
+    UINT16      start;                  // from this vertex ...
+    UINT16      end;                    // ... to this vertex
+    UINT16      angle;                  // angle (0 = east, 16384 = north, ...)
+    UINT16      lineDef;                // linedef that this seg goes along*/
+    UINT16      flip;                   // true if not the same direction as linedef
+    UINT16      offset;                 // distance from starting point
+};
+
+struct wSSector {
+    UINT16      num;                    // number of Segs in this Sub-Sector
+    UINT16      first;                  // first Seg
+};
+
+struct wBound {
+    INT16       maxy, miny;
+    INT16       minx, maxx;             // bounding rectangle
+};
+
+struct wNode {
+    INT16       x, y;                   // starting point
+    INT16       dx, dy;                 // offset to ending point
+    wBound      side[2];
+    UINT16      child[2];               // Node or SSector (if high bit is set)
 };
 
 struct wReject {
-    USHORT      dummy;
+    UINT16      dummy;
 };
 
 struct wBlockMap {
-    SHORT       xOrigin;
-    SHORT       yOrigin;
-    USHORT      noColumns;
-    USHORT      noRows;
-//    USHORT    data [];
+    INT16       xOrigin;
+    INT16       yOrigin;
+    UINT16      noColumns;
+    UINT16      noRows;
+//    UINT16    data [];
 };
 
 class DoomLevel {
 
+    struct sLevelLump {
+        bool    changed;
+        int     byteOrder;
+        int     elementSize;
+        int     elementCount;
+        UINT32  dataSize;
+        void   *rawData;
+
+        sLevelLump ();
+    };
+
     WAD        *m_Wad;
     wLumpName   m_Name;
-    bool        m_Modified;
-    bool        m_Valid;
-    bool        m_Checked;
 
-    bool        m_NewFormat;
+    bool        m_IsHexen;
     const char *m_Title;
     const char *m_Music;
     int         m_Cluster;
 
-    int         m_MapDataSize;
-    int         m_NoThings;
-    int         m_NoLineDefs;
-    int         m_NoSideDefs;
-    int         m_NoVertices;
-    int         m_NoSectors;
-    int         m_NoSegs;
-    int         m_NoSubSectors;
-    int         m_NoNodes;
-    int         m_RejectSize;
-    int         m_BlockMapSize;
+    wThing     *m_ThingData;
+    wLineDef   *m_LineDefData;
 
-    char       *m_RawThing;
-    char       *m_RawLineDef;
-
-    bool        m_ThingsChanged;
-    bool        m_LineDefsChanged;
-    bool        m_SideDefsChanged;
-    bool        m_VerticesChanged;
-    bool        m_SectorsChanged;
-    bool        m_SegsChanged;
-    bool        m_SubSectorsChanged;
-    bool        m_NodesChanged;
-    bool        m_RejectChanged;
-    bool        m_BlockMapChanged;
-
-    char       *m_MapData;
-    wThing     *m_Thing;
-    wLineDef   *m_LineDef;
-    wSideDef   *m_SideDef;
-    wVertex    *m_Vertex;
-    wSector    *m_Sector;
-    wSegs      *m_Segs;
-    wSSector   *m_SubSector;
-    wNode      *m_Node;
-    wReject    *m_Reject;               // optional
-    wBlockMap  *m_BlockMap;
+    sLevelLump  m_Map;
+    sLevelLump  m_Thing;
+    sLevelLump  m_LineDef;
+    sLevelLump  m_SideDef;
+    sLevelLump  m_Vertex;
+    sLevelLump  m_Sector;
+    sLevelLump  m_Segs;
+    sLevelLump  m_SubSector;
+    sLevelLump  m_Node;
+    sLevelLump  m_Reject;
+    sLevelLump  m_BlockMap;
+    sLevelLump  m_Behavior;
 
     static void ConvertRaw1ToThing ( int, wThing1 *, wThing * );
     static void ConvertRaw2ToThing ( int, wThing2 *, wThing * );
@@ -234,22 +216,41 @@ class DoomLevel {
     static void ConvertLineDefToRaw1 ( int, wLineDef *, wLineDef1 * );
     static void ConvertLineDefToRaw2 ( int, wLineDef *, wLineDef2 * );
 
-    int  Load ();
-    void LoadHexenInfo ();
+    void ReplaceVertices ( int *, wVertex *, int );
 
-    void ReadThings ( bool, const wadDirEntry *, const wadDirEntry * );
-    bool ReadLineDefs ( const wadDirEntry *, const wadDirEntry * );
+    void DetermineType ();
 
-    bool SaveThings ( const wadDirEntry *, const wadDirEntry * );
-    bool SaveLineDefs ( const wadDirEntry *, const wadDirEntry * );
+    bool Load ();
+    bool LoadHexenInfo ();
 
-#if defined ( BIG_ENDIAN )
-    void AdjustByteOrder ();
-#endif
+    bool LoadThings ( bool );
+    bool LoadLineDefs ( bool );
 
-    void DeleteTransients ();
+    void StoreThings ();
+    void StoreLineDefs ();
+
+    void NewEntry ( sLevelLump *, int, void * );
+
+    bool ReadEntry ( sLevelLump *, const char *, const wadDirEntry *, const wadDirEntry *, bool );
+    bool UpdateEntry ( sLevelLump *, const char *, const char *, bool );
+
+    void AdjustByteOrderMap ( int );
+    void AdjustByteOrderThing ( int );
+    void AdjustByteOrderLineDef ( int );
+    void AdjustByteOrderSideDef ( int );
+    void AdjustByteOrderVertex ( int );
+    void AdjustByteOrderSector ( int );
+    void AdjustByteOrderSegs ( int );
+    void AdjustByteOrderSubSector ( int );
+    void AdjustByteOrderNode ( int );
+    void AdjustByteOrderReject ( int );
+    void AdjustByteOrderBlockMap ( int );
+    void AdjustByteOrderBehavior ( int );
+
+    void AdjustByteOrder ( int );
+
+    void CleanUpEntry ( sLevelLump * );
     void CleanUp ();
-    void WipeOut ();
 
 public:
 
@@ -263,27 +264,29 @@ public:
     const char *Music () const                  { return m_Music ? m_Music : NULL; }
     int MapCluster () const                     { return m_Cluster; }
 
-    int ThingCount () const                     { return m_NoThings; }
-    int LineDefCount () const                   { return m_NoLineDefs; }
-    int SideDefCount () const                   { return m_NoSideDefs; }
-    int VertexCount () const                    { return m_NoVertices; }
-    int SectorCount () const                    { return m_NoSectors; }
-    int SegCount () const                       { return m_NoSegs; }
-    int SubSectorCount () const                 { return m_NoSubSectors; }
-    int NodeCount () const                      { return m_NoNodes; }
-    int RejectSize () const                     { return m_RejectSize; }
-    int BlockMapSize () const                   { return m_BlockMapSize; }
+    int ThingCount () const                     { return m_Thing.elementCount; }
+    int LineDefCount () const                   { return m_LineDef.elementCount; }
+    int SideDefCount () const                   { return m_SideDef.elementCount; }
+    int VertexCount () const                    { return m_Vertex.elementCount; }
+    int SectorCount () const                    { return m_Sector.elementCount; }
+    int SegCount () const                       { return m_Segs.elementCount; }
+    int SubSectorCount () const                 { return m_SubSector.elementCount; }
+    int NodeCount () const                      { return m_Node.elementCount; }
+    int RejectSize () const                     { return m_Reject.dataSize; }
+    int BlockMapSize () const                   { return m_BlockMap.dataSize; }
+    int BehaviorSize () const                   { return m_Behavior.dataSize; }
 
-    const wThing        *GetThings () const     { return m_Thing; }
-    const wLineDef      *GetLineDefs () const   { return m_LineDef; }
-    const wSideDef      *GetSideDefs () const   { return m_SideDef; }
-    const wVertex       *GetVertices () const   { return m_Vertex; }
-    const wSector       *GetSectors () const    { return m_Sector; }
-    const wSegs         *GetSegs () const       { return m_Segs; }
-    const wSSector      *GetSubSectors () const { return m_SubSector; }
-    const wNode         *GetNodes () const      { return m_Node; }
-    const wReject       *GetReject () const     { return m_Reject; }
-    const wBlockMap     *GetBlockMap () const   { return m_BlockMap; }
+    const wThing    *GetThings () const         { return m_ThingData; }
+    const wLineDef  *GetLineDefs () const       { return m_LineDefData; }
+    const wSideDef  *GetSideDefs () const       { return ( wSideDef * ) m_SideDef.rawData; }
+    const wVertex   *GetVertices () const       { return ( wVertex * ) m_Vertex.rawData; }
+    const wSector   *GetSectors () const        { return ( wSector * ) m_Sector.rawData; }
+    const wSegs     *GetSegs () const           { return ( wSegs * ) m_Segs.rawData; }
+    const wSSector  *GetSubSectors () const     { return ( wSSector * ) m_SubSector.rawData; }
+    const wNode     *GetNodes () const          { return ( wNode * ) m_Node.rawData; }
+    const wReject   *GetReject () const         { return ( wReject * ) m_Reject.rawData; }
+    const wBlockMap *GetBlockMap () const       { return ( wBlockMap * ) m_BlockMap.rawData; }
+    const UINT8     *GetBehavior () const       { return ( UINT8 * ) m_Behavior.rawData; }
 
     void NewThings ( int, wThing * );
     void NewLineDefs ( int, wLineDef * );
@@ -293,15 +296,15 @@ public:
     void NewSegs ( int, wSegs * );
     void NewSubSectors ( int, wSSector * );
     void NewNodes ( int, wNode * );
-    void NewReject ( int, wReject *, bool );
+    void NewReject ( int, UINT8 * );
     void NewBlockMap ( int, wBlockMap * );
+    void NewBehavior ( int, char * );
 
-    bool isValid ( bool );
-    bool hasChanged () const;
+    bool IsValid ( bool, bool = true ) const;
+    bool IsDirty () const;
 
     void TrimVertices ();
     void PackVertices ();
-    void UnPackVertices ();
 
     void PackSideDefs ();
     void UnPackSideDefs ();
@@ -309,11 +312,30 @@ public:
     bool UpdateWAD ();
     void AddToWAD ( WAD *wad );
 
-    sThingDesc   *FindThing ( int type );
+    sThingDesc *FindThing ( int type );
     static sLineDefDesc *FindLineDef ( int type );
 
-    sThingDesc   *GetThing ( int index );
+    sThingDesc *GetThing ( int index );
     static sLineDefDesc *GetLineDef ( int index );
 };
+
+#if ( BYTE_ORDER == LITTLE_ENDIAN )
+
+    inline void DoomLevel::AdjustByteOrderMap ( int )       {}
+    inline void DoomLevel::AdjustByteOrderThing ( int )     {}
+    inline void DoomLevel::AdjustByteOrderLineDef ( int )   {}
+    inline void DoomLevel::AdjustByteOrderSideDef ( int )   {}
+    inline void DoomLevel::AdjustByteOrderVertex ( int )    {}
+    inline void DoomLevel::AdjustByteOrderSector ( int )    {}
+    inline void DoomLevel::AdjustByteOrderSegs ( int )      {}
+    inline void DoomLevel::AdjustByteOrderSubSector ( int ) {}
+    inline void DoomLevel::AdjustByteOrderNode ( int )      {}
+    inline void DoomLevel::AdjustByteOrderReject ( int )    {}
+    inline void DoomLevel::AdjustByteOrderBlockMap ( int )  {}
+    inline void DoomLevel::AdjustByteOrderBehavior ( int )  {}
+
+    inline void DoomLevel::AdjustByteOrder ( int )          {}
+
+#endif
 
 #endif
