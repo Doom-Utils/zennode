@@ -53,10 +53,6 @@ struct {
     bool  Tree;
 } flags;
 
-void ProgError ( char *, ... )
-{
-}
-
 void printHelp ()
 {
     fprintf ( stderr, "Usage:\n\n" );

@@ -147,7 +147,7 @@ struct wBound {
 struct wNode {
     SHORT	x, y;			// starting point
     SHORT	dx, dy;			// offset to ending point
-    wBound	side [2];
+    wBound	side[2];
     USHORT	child[2];		// Node or SSector (if high bit is set)
 };
 
@@ -170,7 +170,7 @@ struct wBlockMap {
     SHORT	yOrigin;
     USHORT	noColumns;
     USHORT	noRows;
-//  USHORT	data [1];
+//  USHORT	data [0];
 };
 
 class DoomLevel {

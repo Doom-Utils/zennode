@@ -36,10 +36,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common.hpp"
-#include "wad.hpp"
-#include "level.hpp"
-#include "ZenNode.hpp"
 
 #if defined ( __OS2__ )
     #include <conio.h>
@@ -50,19 +46,17 @@
     #include <os2.h>
 #elif defined ( __WIN32__ )
     #include <conio.h>
-    #include <dos.h>
     #include <io.h>
-    #include <signal.h>
-    #include <windows.h>
-    #include <wincon.h>
 #elif defined ( __GNUC__ )
-    #include <signal.h>
-    #include <sys/time.h>
-    #include <termios.h>
     #include <unistd.h>
 #else
     #error This program must be compiled as a 32-bit app.
 #endif
+
+#include "common.hpp"
+#include "wad.hpp"
+#include "level.hpp"
+#include "ZenNode.hpp"
 
 #if defined ( __BORLANDC__ )
     #include <dir.h>
@@ -70,11 +64,9 @@
 
 #if defined ( DEBUG )
     #include "logger.hpp"
-    cLogger myLogger ( 10, "ZenNode.log" );
-    cLogger *gLogger = &myLogger;
 #endif
 
-#define VERSION		"1.0.2"
+#define VERSION		"1.0.3"
 #define BANNER          "ZenNode Version " VERSION " (c) 1994-2000 Marc Rousseau\r\n\r\n"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
@@ -732,7 +724,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
                                                                  oldEfficiency / 10, oldEfficiency % 10 );
             PrintTime ( rejectTime );
         } else {
-            Status ( "REJECT - Special effects detected - use -f to force an update" );
+            Status ( "REJECT - Special effects detected - use -rf to force an update" );
         }
 
         cprintf ( "\r\n" );

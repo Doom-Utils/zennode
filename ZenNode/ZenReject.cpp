@@ -323,13 +323,6 @@ void MakeNeighbors ( sSectorStuff *sec1, sSectorStuff *sec2 )
 }
 
 //
-// Add sec2 to sec1's list of children
-//
-void AddChild ( sSectorStuff *sec1, sSectorStuff *sec2 )
-{
-}
-
-//
 // Mark sec2 and all it's children as children of sec1
 //
 void MakeChild ( sSectorStuff *sec1, sSectorStuff *sec2 )
@@ -500,8 +493,8 @@ void PrepareBLOCKMAP ( DoomLevel *level )
         blockMapBounds [ row ].hi = -1;
         for ( int col = 0; col < blockMap->noColumns; col++ ) {
             USHORT *ptr = ( USHORT * ) blockMap + offset [index++];
-            int i;
-            for ( i = 1; ptr [i] != ( USHORT ) -1; i++ );
+            int i = 1;
+            while ( ptr [i] != ( USHORT ) -1 ) i++;
             sBlockMapArrayEntry *newPtr = NULL;
             if ( i > 1 ) {
                 int j = 0;

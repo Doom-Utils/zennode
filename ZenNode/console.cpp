@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
 //
-// File:        ZenMain.cpp
+// File:        console.cpp
 // Date:        13-Aug-2000
 // Programmer:  Marc Rousseau
 //
@@ -36,10 +36,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common.hpp"
-#include "wad.hpp"
-#include "level.hpp"
-#include "ZenNode.hpp"
 
 #if defined ( __OS2__ )
     #include <conio.h>
@@ -63,6 +59,11 @@
 #else
     #error This program must be compiled as a 32-bit app.
 #endif
+
+#include "common.hpp"
+#include "wad.hpp"
+#include "level.hpp"
+#include "ZenNode.hpp"
 
 void SaveConsoleSettings ();
 void RestoreConsoleSettings ();
@@ -160,8 +161,10 @@ static CONSOLE_SCREEN_BUFFER_INFO screenBufferInfo;
 static CONSOLE_CURSOR_INFO        cursorInfo;
 static BOOL                       oldVisible;
 
-static HANDLE     hOutput;
-static COORD      currentPos;
+static HANDLE                     hOutput;
+static COORD                      currentPos;
+
+static LARGE_INTEGER              timerFrequency;
 
 long WINAPI myHandler ( PEXCEPTION_POINTERS )
 {
@@ -177,6 +180,12 @@ void SignalHandler ( int )
     exit ( -1 );
 }
 
+void RestoreConsoleSettings ()
+{
+    cursorInfo.bVisible = oldVisible;
+    SetConsoleCursorInfo ( hOutput, &cursorInfo );
+}
+
 void SaveConsoleSettings ()
 {
     hOutput = GetStdHandle ( STD_OUTPUT_HANDLE );
@@ -188,17 +197,16 @@ void SaveConsoleSettings ()
     signal ( SIGBREAK, SignalHandler );
     signal ( SIGINT, SignalHandler );
     atexit ( RestoreConsoleSettings );
-}
 
-void RestoreConsoleSettings ()
-{
-    cursorInfo.bVisible = oldVisible;
-    SetConsoleCursorInfo ( hOutput, &cursorInfo );
+    QueryPerformanceFrequency ( &timerFrequency );
 }
 
 ULONG CurrentTime ()
 {
-    return GetCurrentTime ();
+    LARGE_INTEGER time;
+    QueryPerformanceCounter ( &time );
+
+    return ( ULONG ) ( 1000 * time.QuadPart / timerFrequency.QuadPart );
 }
 
 void GetXY ( ULONG *x, ULONG *y )
@@ -211,8 +219,8 @@ void GetXY ( ULONG *x, ULONG *y )
 void GotoXY ( ULONG x, ULONG y )
 {
     COORD pos;
-    pos.X = ( short ) x;
-    pos.Y = ( short ) y;
+    pos.X = ( SHORT ) x;
+    pos.Y = ( SHORT ) y;
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
@@ -220,8 +228,8 @@ void Status ( char *message )
 {
     DWORD count;
     int len = strlen ( message );
-    currentPos.X = ( short ) startX;
-    currentPos.Y = ( short ) startY;
+    currentPos.X = ( SHORT ) startX;
+    currentPos.Y = ( SHORT ) startY;
     if ( len ) {
         WriteConsoleOutputCharacter ( hOutput, message, len, currentPos, &count );
         currentPos.X += ( SHORT ) len;
@@ -265,8 +273,8 @@ void MoveUp ( int delta )
 {
     GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
     COORD pos;
-    pos.X = ( short ) 0;
-    pos.Y = ( short ) screenBufferInfo.dwCursorPosition.Y - delta;
+    pos.X = ( SHORT ) 0;
+    pos.Y = ( SHORT ) screenBufferInfo.dwCursorPosition.Y - ( SHORT ) delta;
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
@@ -274,8 +282,8 @@ void MoveDown ( int delta )
 {
     GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
     COORD pos;
-    pos.X = ( short ) 0;
-    pos.Y = ( short ) screenBufferInfo.dwCursorPosition.Y + delta;
+    pos.X = ( SHORT ) 0;
+    pos.Y = ( SHORT ) screenBufferInfo.dwCursorPosition.Y + ( SHORT ) delta;
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
@@ -442,4 +450,5 @@ void MoveDown ( int delta )
     printf ( "\033[%dE", delta );
     fflush ( stdout );
 }
+
 #endif

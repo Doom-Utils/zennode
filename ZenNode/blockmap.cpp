@@ -177,8 +177,8 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
                 // Only go back to the beginning of the previous row
                 int rowStart = ( i / noCols ) * noCols;
                 int lastStart = rowStart ? rowStart - noCols : 0;
-                int index;
-                for ( index = i-1; index >= lastStart; index-- ) {
+                int index = i - 1;
+                while ( index >= lastStart ) {
                     int count = blockList[i].count;
                     if (( blockList[index].count == count ) && 
                         ( memcmp ( blockList[i].line, blockList[index].line, count * sizeof ( int )) == 0 )) {
@@ -186,6 +186,7 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
                         savings += count + 2;
                         break;
                     }
+                    index--;
                 }
                 if ( index >= lastStart ) continue;
             }

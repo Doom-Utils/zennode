@@ -59,10 +59,6 @@
 #if defined ( __BORLANDC__ )
     #pragma option -x -xf
 #endif
-
-void ProgError ( char *, ... )
-{
-}
 
 extern ULONG startX, startY;
 
@@ -107,7 +103,7 @@ void MoveDown ( int delta );
 
 void printHelp ()
 {
-    fprintf ( stderr, "Usage: Compare {/options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
+    fprintf ( stderr, "Usage: compare {/options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
     fprintf ( stderr, "\n" );
     fprintf ( stderr, "     /x+ turn on option   /x- turn off option  û = default\n" );
     fprintf ( stderr, "\n" );
@@ -407,7 +403,7 @@ int main ( int argc, char *argv[] )
         wadList *myList2 = getInputFiles ( argv [argIndex++], wadFileName2 );
         if ( myList2->isEmpty ()) { changes = -1000;  break; }
 
-        cprintf ( "Comparing on: %s and %s\r\n\n", wadFileName1, wadFileName2 );
+        cprintf ( "Comparing: %s and %s\r\n\n", wadFileName1, wadFileName2 );
 
         char levelNames [MAX_LEVELS+1][MAX_LUMP_NAME];
         argIndex = getLevels ( argIndex, argv, levelNames, myList1 );

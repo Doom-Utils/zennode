@@ -44,8 +44,6 @@
 
 #define MAX_LUMP_NAME	8
 
-extern void ProgError ( char *, ... );
-
 enum eLumpType {
     wl_UNCHECKED,
     wl_UNKNOWN,
