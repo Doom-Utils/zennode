@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
 // File:	logger.hpp
-// Date:	15 April 1998
+// Date:	15-Apr-1998
 // Programmer:	Marc Rousseau			 
 //
 // Description: Error Logger object header
 //
-// Copyright (c) 2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1998-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -55,14 +55,14 @@
             DBG_MINOR_TRACE2 (( const char * ) l_prefix );		\
         }								\
         l_prefix << " - ";						\
-								
-    #define ASSERT(x)	(( ! ( x )) ? dbg_Assert (  dbg_FileName, __LINE__, dbg_Stream () << (( const char * ) l_prefix ) << #x ), 1 : 0 )
-    										     	 
+
+    #define ASSERT(x)	(( ! ( x )) ? dbg_Assert ( dbg_FileName, __LINE__, dbg_Stream () << (( const char * ) l_prefix ) << #x ), 1 : 0 )
+
 #else
 
     #define FUNCTION_ENTRY(t,f,l)
     #define ASSERT(x)
-    
+
 #endif
 
 #define TRACE(x) {							\
@@ -151,15 +151,6 @@ enum eLOG_TYPE {
     LOG_TYPE_MAX
 };  
 
-struct sLogEntry {
-    ULONG       Type;
-    ULONG       FileIndex;
-    ULONG       LineNumber;
-    ULONG       ThreadID;
-    __int64     Time;
-    char        Text [ 256 ];
-};
-
 class dbgString {
 
     friend dbgString &hex ( dbgString & );
@@ -173,18 +164,22 @@ class dbgString {
 public:
 
     dbgString ( char * );
-    
+
     operator const char * ();
     void flush ();
 
     dbgString &operator << ( char );
     dbgString &operator << ( const char * );
+    dbgString &operator << ( short );
+    dbgString &operator << ( unsigned short );
     dbgString &operator << ( int );
+    dbgString &operator << ( unsigned int );
     dbgString &operator << ( long );
     dbgString &operator << ( unsigned long );
+/*
     dbgString &operator << ( __int64 );
     dbgString &operator << ( unsigned __int64 );
-    dbgString &operator << ( double );
+*/
     dbgString &operator << ( void * );
     dbgString &operator << ( dbgString &(*f) ( dbgString & ));
 
@@ -195,18 +190,10 @@ dbgString &dec ( dbgString & );
 
 extern "C" {
 
-    // Client Functions
-    dbgString & __cdecl dbg_Stream ();
-    ULONG __cdecl dbg_RegisterFile ( const char * );
-    void  __cdecl dbg_Assert ( int, int, const char * );
-    void  __cdecl dbg_Record ( int, int, int, const char * );
-
-    // Server Functions
-    bool        __cdecl dbg_StartServer ();
-    bool        __cdecl dbg_StopServer ();
-    sLogEntry  *__cdecl dbg_GetRecord ();
-    const char *__cdecl dbg_GetFileName ( ULONG );
-    const char *__cdecl dbg_GetModuleName ( ULONG );
+    dbgString  &dbg_Stream ();
+    ULONG       dbg_RegisterFile ( const char * );
+    void        dbg_Assert ( int, int, const char * );
+    void        dbg_Record ( int, int, int, const char * );
 
 };
 

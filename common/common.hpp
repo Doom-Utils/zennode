@@ -6,7 +6,7 @@
 //
 // Description:
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -52,6 +52,11 @@ typedef unsigned long  ULONG;
     typedef unsigned char  BYTE;
     typedef unsigned short WORD;
     typedef unsigned long  DWORD;
+    typedef long long      LLONG;
+
+#else
+
+    typedef __int64        LLONG;
 
 #endif
 

@@ -6,7 +6,7 @@
 //
 // Description: Definitions of structures used by the ZenNode routines
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -39,44 +39,45 @@ typedef unsigned short BAM;
 typedef long double REAL;	// Must have at least 50 significant bits
 
 struct SEG {
-    wSegs  Data;
-    int    Sector;
-    int    Side;
-    int    noSplit;
+    wSegs           Data;
+    const wLineDef *LineDef;
+    int             Sector;
+    int             Side;
+    bool            DontSplit;
 };
 
 struct NODE {
-    SHORT  id;
-    wNode  Data;
-    NODE  *Next;
+    SHORT     id;
+    wNode     Data;
+    NODE     *Next;
 };
 
 struct sAlias {
-    int   index;			// 1st co-linear lineDef
-    int   flip;				// different dir. from 1st lineDef
+    int       index;			// 1st co-linear lineDef
+    int       flip;			// different dir. from 1st lineDef
 };
 
 struct sSectorInfo {
-    int    index;
-    int    noSubSectors;
-    int   *subSector;
+    int       index;
+    int       noSubSectors;
+    int      *subSector;
 };
 
 struct sBSPOptions {
-    int      algorithm;
-    bool     showProgress;
-    bool     reduceLineDefs;		// global flag for invisible linedefs
-    bool    *ignoreLineDef;		// linedefs that can be left out
-    bool    *dontSplit;			// linedefs that can't be split
-    bool    *keepUnique;		// unique sector requirements
+    int       algorithm;
+    bool      showProgress;
+    bool      reduceLineDefs;		// global flag for invisible linedefs
+    bool     *ignoreLineDef;		// linedefs that can be left out
+    bool     *dontSplit;		// linedefs that can't be split
+    bool     *keepUnique;		// unique sector requirements
 };
 
 struct sScoreInfo {
-    int index;
-    int metric1;
-    int metric2;
-    int invalid;
-    int total;
+    int       index;
+    int       metric1;
+    int       metric2;
+    int       invalid;
+    int       total;
 };
 
 #define sgn(a)		((0<(a))-((a)<0))

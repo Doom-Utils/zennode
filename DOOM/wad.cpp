@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
 // File:        wad.cpp
-// Date:        26-October-1994
+// Date:        26-Oct-1994
 // Programmer:  Marc Rousseau
 //
 // Description: Object classes for manipulating Doom WAD files
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -219,13 +219,13 @@ bool WAD::WriteEntry ( const wadDirEntry *entry, ULONG newSize, void *newStuff, 
     if ( index == ( ULONG ) -1 ) return false;
 
     if ( newSize && ( newSize == entry->size )) {
-        void *oldStuff = ReadEntry ( entry, NULL );
+        char *oldStuff = ( char * ) ReadEntry ( entry, NULL );
         if ( memcmp ( newStuff, oldStuff, newSize ) == 0 ) {
-            delete oldStuff;
-            if ( owner ) delete newStuff;
+            delete [] oldStuff;
+            if ( owner ) delete [] ( char * ) newStuff; ////FIX ME
             return false;
         }
-        delete oldStuff;
+        delete [] oldStuff;
     }
 
     UCHAR *temp = ( UCHAR * ) newStuff;
@@ -555,7 +555,7 @@ bool WAD::SaveFile ( const char *newName )
                     errors = true;
 //                  fprintf ( stderr, "ERROR: WAD::SaveFile - Error writing entry %8.8s. (file copy)\n", dir->name );
                 }
-                delete ptr;
+                delete ptr;////FIX ME
             }
 	}
         dir->offset = offset;
@@ -942,7 +942,7 @@ bool wadList::Save ( const char *newName )
                 errors = true;
 //                fprintf ( stderr, "\nERROR: wadList::Save - Error writing entry %8.8s.", srcDir->entry->name );
             }
-            delete ptr;
+            delete ptr;////FIX ME
             dir[i].offset = offset;
             srcDir++;
         }

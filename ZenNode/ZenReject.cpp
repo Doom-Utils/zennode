@@ -6,7 +6,7 @@
 //
 // Description: This module contains the logic for the REJECT builder.
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1995-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -147,6 +147,11 @@ bool FeaturesDetected ( DoomLevel *level )
     if ( ptr == NULL ) return false;
 
     int noSectors = level->SectorCount ();
+
+    // Make sure it's a valid REJECT structure before analyzing it
+    int rejectSize = (( noSectors * noSectors ) + 7 ) / 8;
+    if ( level->RejectSize () != rejectSize ) return false;
+
     int bits = 8;
     int data = *ptr++;
     bool **table = new bool * [ noSectors ];
@@ -283,10 +288,10 @@ bool SetupLines ( DoomLevel *level )
         const sPoint *vertS = &vertices [ lineDef [i].start ];
         const sPoint *vertE = &vertices [ lineDef [i].end ];
 
-        if ( lineDef[i].flags & LDF_TWO_SIDED ) {
+        if ( lineDef [i].flags & LDF_TWO_SIDED ) {
 
-            int rSide = lineDef[i].sideDef [ RIGHT_SIDEDEF ];
-            int lSide = lineDef[i].sideDef [ LEFT_SIDEDEF ];
+            int rSide = lineDef [i].sideDef [ RIGHT_SIDEDEF ];
+            int lSide = lineDef [i].sideDef [ LEFT_SIDEDEF ];
             if (( lSide == NO_SIDEDEF ) || ( rSide == NO_SIDEDEF )) continue;
             if ( sideDef [ lSide ].sector == sideDef [ rSide ].sector ) continue;
             sSeeThruLine *stLine = &seeThruLines [ noSeeThruLines++ ];

@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
-// File:        Level.hpp
-// Date:        26-October-1994
+// File:        level.hpp
+// Date:        26-Oct-1994
 // Programmer:  Marc Rousseau
 //
 // Description: Object classes for manipulating Doom Maps
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by

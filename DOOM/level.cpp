@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
 // File:        level.cpp
-// Date:        26-October-1994
+// Date:        26-Oct-1994
 // Programmer:  Marc Rousseau
 //
 // Description: Object classes for manipulating Doom Maps
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -246,8 +246,8 @@ void DoomLevel::CleanUp ()
 {
     DeleteTransients ();
 
-    if ( rawThing )   { delete rawThing;    rawThing   = NULL; }
-    if ( rawLineDef ) { delete rawLineDef;  rawLineDef = NULL; }
+    if ( rawThing )   { delete rawThing;    rawThing   = NULL; }////FIX ME
+    if ( rawLineDef ) { delete rawLineDef;  rawLineDef = NULL; }////FIX ME
 
     if ( thing )      { delete thing;       thing      = NULL; }
     if ( lineDef )    { delete lineDef;     lineDef    = NULL; }
@@ -745,7 +745,7 @@ bool DoomLevel::SaveThings ( const wadDirEntry *start, const wadDirEntry *end )
 {
     bool changed;
     const wadDirEntry *dir = wad->FindDir ( "THINGS", start, end );
-    if ( rawThing ) delete rawThing;
+    if ( rawThing ) delete rawThing;////FIX ME
     if ( newFormat ) {
         rawThing = new wThing2 [ noThings ];
         ConvertThingToRaw2 ( noThings, thing, ( wThing2 * ) rawThing );
@@ -762,7 +762,7 @@ bool DoomLevel::SaveLineDefs ( const wadDirEntry *start, const wadDirEntry *end 
 {
     bool changed;
     const wadDirEntry *dir = wad->FindDir ( "LINEDEFS", start, end );
-    if ( rawLineDef ) delete rawLineDef;
+    if ( rawLineDef ) delete rawLineDef;////FIX ME
     if ( newFormat ) {
         rawLineDef = new wLineDef2 [ noLineDefs ];
         ConvertLineDefToRaw2 ( noLineDefs, lineDef, ( wLineDef2 * ) rawLineDef );
@@ -901,7 +901,7 @@ void DoomLevel::NewThings ( int newCount, wThing *newData )
     modified = true;
     thingsChanged = true;
 
-    if ( rawThing ) delete rawThing;
+    if ( rawThing ) delete rawThing;////FIX ME
     rawThing = NULL;
 
     if ( thing ) delete thing;
@@ -919,7 +919,7 @@ void DoomLevel::NewLineDefs ( int newCount, wLineDef *newData )
     modified = true;
     lineDefsChanged = true;
 
-    if ( rawLineDef ) delete rawLineDef;
+    if ( rawLineDef ) delete rawLineDef;////FIX ME
     rawLineDef = NULL;
 
     if ( lineDef ) delete lineDef;

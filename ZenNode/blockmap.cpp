@@ -1,12 +1,12 @@
 //----------------------------------------------------------------------------
 //
 // File:        blockmap.cpp
-// Date:        14-July-1995
+// Date:        14-Jul-1995
 // Programmer:  Marc Rousseau
 //
 // Description: This module contains the logic for the BLOCKMAP builder.
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by

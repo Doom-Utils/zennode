@@ -1,7 +1,7 @@
 # ZenNode makefile for Linux
 
 CC := g++
-CFLAGS := -g -O6 -fstrength-reduce -funroll-loops -malign-jumps=2 -march=pentiumpro -fno-exceptions -fno-rtti
+CFLAGS := -g -O6 -fstrength-reduce -funroll-loops -malign-jumps=2 -mcpu=i686 -fno-exceptions -fno-rtti
 WARNINGS := -Wall -Wno-format -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winline
 INCLUDES := -I../DOOM -I../common
 

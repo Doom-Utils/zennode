@@ -6,7 +6,7 @@
 //
 // Description: The application specific code for ZenNode
 //
-// Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -54,6 +54,7 @@
 #endif
 
 #include "common.hpp"
+#include "logger.hpp"
 #include "wad.hpp"
 #include "level.hpp"
 #include "ZenNode.hpp"
@@ -62,12 +63,14 @@
     #include <dir.h>
 #endif
 
+DBG_REGISTER ( __FILE__ );
+
 #if defined ( DEBUG )
-    #include "logger.hpp"
+    LOG_FLAGS g_LogFlags;
 #endif
 
-#define VERSION		"1.0.4"
-#define BANNER          "ZenNode Version " VERSION " (c) 1994-2000 Marc Rousseau\r\n\r\n"
+#define VERSION		"1.0.5"
+#define BANNER          "ZenNode Version " VERSION " (c) 1994-2001 Marc Rousseau\r\n\r\n"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
 
@@ -144,6 +147,8 @@ void MoveDown ( int delta );
 
 void printHelp ()
 {
+    FUNCTION_ENTRY ( NULL, "printHelp", true );
+
     fprintf ( stdout, "Usage: ZenNode {-options} filename[.wad] [level{+level}] {-o|x output[.wad]}\n" );
     fprintf ( stdout, "\n" );
     fprintf ( stdout, "     -x+ turn on option   -x- turn off option  %c = default\n", DEFAULT_CHAR );
@@ -169,6 +174,8 @@ void printHelp ()
 
 bool parseBLOCKMAPArgs ( char *&ptr, bool setting )
 {
+    FUNCTION_ENTRY ( NULL, "parseBLOCKMAPArgs", true );
+
     config.BlockMap.Rebuild = setting;
     while ( *ptr ) {
         int option = *ptr++;
@@ -187,6 +194,8 @@ bool parseBLOCKMAPArgs ( char *&ptr, bool setting )
 
 bool parseNODESArgs ( char *&ptr, bool setting )
 {
+    FUNCTION_ENTRY ( NULL, "parseNODESArgs", true );
+
     config.Nodes.Rebuild = setting;
     while ( *ptr ) {
         int option = *ptr++;
@@ -210,6 +219,8 @@ bool parseNODESArgs ( char *&ptr, bool setting )
 
 bool parseREJECTArgs ( char *&ptr, bool setting )
 {
+    FUNCTION_ENTRY ( NULL, "parseREJECTArgs", true );
+
     config.Reject.Rebuild = setting;
     while ( *ptr ) {
         int option = *ptr++;
@@ -227,8 +238,10 @@ bool parseREJECTArgs ( char *&ptr, bool setting )
     return false;
 }
 
-int parseArgs ( int index, char *argv[] )
+int parseArgs ( int index, char *argv [] )
 {
+    FUNCTION_ENTRY ( NULL, "parseArgs", true );
+
     bool errors = false;
     while ( argv [ index ] ) {
 
@@ -267,8 +280,10 @@ int parseArgs ( int index, char *argv[] )
     return index;
 }
 
-void ReadConfigFile ( char *argv[] )
+void ReadConfigFile ( char *argv [] )
 {
+    FUNCTION_ENTRY ( NULL, "ReadConfigFile", true );
+
     FILE *configFile = fopen ( CONFIG_FILENAME, "rt" );
     if ( configFile == NULL ) {
         char fileName [ 256 ];
@@ -322,8 +337,10 @@ void ReadConfigFile ( char *argv[] )
     if ( errors ) fprintf ( stderr, "\n" );
 }
 
-int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadList *list )
+int getLevels ( int argIndex, char *argv [], char names [][MAX_LUMP_NAME], wadList *list )
 {
+    FUNCTION_ENTRY ( NULL, "getLevels", true );
+
     int index = 0, errors = 0;
 
     char buffer [128];
@@ -371,16 +388,20 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
 
 void EnsureExtension ( char *fileName, const char *ext )
 {
+    FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
+
     int length = strlen ( fileName );
     char *ptr = strrchr ( fileName, '.' );
     if (( ptr && strchr ( ptr, SEPERATOR )) ||
-        ( ! ptr && stricmp ( &fileName[length-4], ext ))) {
+        ( ! ptr && stricmp ( &fileName [length-4], ext ))) {
         strcat ( fileName, ext );
     }
 }
 
 const char *TypeName ( eWadType type )
 {
+    FUNCTION_ENTRY ( NULL, "TypeName", true );
+
     const char *name = NULL;
     switch ( type ) {
         case wt_DOOM    : name = "DOOM";	break;
@@ -394,6 +415,8 @@ const char *TypeName ( eWadType type )
 
 wadList *getInputFiles ( char *cmdLine, char *wadFileName )
 {
+    FUNCTION_ENTRY ( NULL, "getInputFiles", true );
+
     char *listNames = wadFileName;
     wadList *myList = new wadList;
 
@@ -452,6 +475,8 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
 
 void ReadSection ( FILE *file, int max, bool *array )
 {
+    FUNCTION_ENTRY ( NULL, "ReadSection", true );
+
     char ch = ( char ) fgetc ( file );
     while (( ch != '[' ) && ! feof ( file )) {
         ungetc ( ch, file );
@@ -494,8 +519,10 @@ void ReadSection ( FILE *file, int max, bool *array )
 
 void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options )
 {
+    FUNCTION_ENTRY ( NULL, "ReadCustomFile", true );
+
     char fileName [ 256 ];
-    const wadListDirEntry *dir = myList->FindWAD ( curLevel->Name ());
+    const wadListDirEntry *dir = myList->FindWAD ( curLevel->Name (), NULL, NULL );
     strcpy ( fileName, dir->wad->Name ());
     char *ptr = &fileName [ strlen ( fileName )];
     while ( *--ptr != '.' );
@@ -568,11 +595,11 @@ void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options
                 const wLineDef *lineDef = curLevel->GetLineDefs ();
                 const wSideDef *sideDef = curLevel->GetSideDefs ();
                 for ( int side, i = 0; i < curLevel->LineDefCount (); i++, lineDef++ ) {
-                    side = lineDef->sideDef[0];
+                    side = lineDef->sideDef [0];
                     if (( side != NO_SIDEDEF ) && ( array [ sideDef [ side ].sector ])) {
                         options->dontSplit [i] = true;
 		    }
-                    side = lineDef->sideDef[1];
+                    side = lineDef->sideDef [1];
                     if (( side != NO_SIDEDEF ) && ( array [ sideDef [ side ].sector ])) {
                         options->dontSplit [i] = true;
 		    }
@@ -590,6 +617,8 @@ void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options
 
 ULONG CheckREJECT ( DoomLevel *curLevel )
 {
+    FUNCTION_ENTRY ( NULL, "CheckREJECT", true );
+
     static bool initialized = false;
     if ( ! initialized ) {
         initialized = true;
@@ -610,19 +639,23 @@ ULONG CheckREJECT ( DoomLevel *curLevel )
     if ( curLevel->GetReject () != 0 ) {
         UCHAR *ptr = ( UCHAR * ) curLevel->GetReject ();
         while ( size-- ) count += HammingTable [ *ptr++ ];
-        count -= HammingTable [ ptr[-1] & mask ];
+        count -= HammingTable [ ptr [-1] & mask ];
     }
     return ( ULONG ) ( 1000.0 * count / ( noSectors * noSectors ) + 0.5 );
 }
 
 void PrintTime ( ULONG time )
 {
+    FUNCTION_ENTRY ( NULL, "PrintTime", false );
+
     GotoXY ( 63, startY );
     cprintf ( "%3ld.%03ld sec%s", time / 1000, time % 1000, ( time == 1000 ) ? "" : "s" );
 }
 
 bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 {
+    FUNCTION_ENTRY ( NULL, "ProcessLevel", true );
+
     ULONG dummyX = 0;
 
     *ellapsed = 0;
@@ -751,7 +784,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 
     int noSectors = curLevel->SectorCount ();
     int rejectSize = (( noSectors * noSectors ) + 7 ) / 8;
-    if ( curLevel->RejectSize () != rejectSize ) {
+    if (( curLevel->RejectSize () != rejectSize ) && ( config.Reject.Rebuild == false )) {
         fprintf ( stderr, "WARNING: The REJECT structure for %s is the wrong size - try using -r\n", name );
     }
 
@@ -762,6 +795,8 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 
 void PrintStats ( int totalLevels, ULONG totalTime, int totalUpdates )
 {
+    FUNCTION_ENTRY ( NULL, "PrintStats", true );
+
     if ( totalLevels != 0 ) {
 
         cprintf ( "%d Level%s processed in ", totalLevels, totalLevels > 1 ? "s" : "" );
@@ -789,8 +824,10 @@ void PrintStats ( int totalLevels, ULONG totalTime, int totalUpdates )
     }
 }
 
-int getOutputFile ( int index, char *argv[], char *wadFileName )
+int getOutputFile ( int index, char *argv [], char *wadFileName )
 {
+    FUNCTION_ENTRY ( NULL, "getOutputFile", true );
+
     strtok ( wadFileName, "+" );
 
     char *ptr = argv [ index ];
@@ -819,6 +856,8 @@ int getOutputFile ( int index, char *argv[], char *wadFileName )
 
 char *ConvertNumber ( ULONG value )
 {
+    FUNCTION_ENTRY ( NULL, "ConvertNumber", true );
+
     static char buffer [ 25 ];
     char *ptr = &buffer [ 20 ];
 
@@ -833,8 +872,10 @@ char *ConvertNumber ( ULONG value )
     return ptr;
 }
 
-int main ( int argc, char *argv[] )
+int main ( int argc, char *argv [] )
 {
+    FUNCTION_ENTRY ( NULL, "main", true );
+
     cprintf ( BANNER );
     if ( ! isatty ( fileno ( stdout ))) fprintf ( stdout, BANNER );
     if ( ! isatty ( fileno ( stderr ))) fprintf ( stderr, BANNER );
@@ -878,6 +919,8 @@ int main ( int argc, char *argv[] )
         wadList *myList = getInputFiles ( argv [argIndex++], wadFileName );
         if ( myList->isEmpty ()) break;
         cprintf ( "Working on: %s\r\n\n", wadFileName );
+
+        TRACE ( "Processing " << wadFileName );
 
         char levelNames [MAX_LEVELS+1][MAX_LUMP_NAME];
         argIndex = getLevels ( argIndex, argv, levelNames, myList );
