@@ -113,8 +113,8 @@ typedef int (*QSORT_FUNC) ( const void *, const void * );
     // Fake out ANSI definitions for deficient compilers
     #define for    if (0); else for
 
-    // C4514: 'xyz' unreferenced inline function has been removed
-    #pragma warning ( disable: 4514 )
+    #pragma warning ( disable: 4514 )    // C4514: 'xyz' unreferenced inline function has been removed
+    #pragma warning ( disable: 4127 )    // C4127: conditional expression is constant - for the 'for' fakeout
 
 #elif defined ( __WATCOMC__ )
 
@@ -139,6 +139,9 @@ typedef int (*QSORT_FUNC) ( const void *, const void * );
     #define MAXEXT	FILENAME_MAX
 
     #define O_BINARY	0
+
+    #define stricmp strcasecmp
+    #define strnicmp strncasecmp
 
 #endif
 

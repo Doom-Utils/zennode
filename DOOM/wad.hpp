@@ -215,11 +215,11 @@ public:
 
     bool Extract ( const wLumpName *, const char * = NULL ) const;
 
-    int  InsertBefore ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
-    int  InsertAfter ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
+    bool InsertBefore ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
+    bool InsertAfter ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
 					  									
-    int  InsertBefore ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
-    int  InsertAfter ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
+    bool InsertBefore ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
+    bool InsertAfter ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
 							 
     bool Remove ( const wLumpName *, const wadDirEntry * = NULL, const wadDirEntry * = NULL  );
 };

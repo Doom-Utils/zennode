@@ -43,6 +43,8 @@
 #include "ZenNode.hpp"
 #include "geometry.hpp"
 
+extern int CreateBLOCKMAP ( DoomLevel *level, bool compress );
+
 enum eVisibility {
     visUnknown,
     visVisible,
@@ -101,18 +103,16 @@ struct sBlockMapArrayEntry {
 struct sSectorStuff {
     int            noActiveLines;
     int            noLines;
-    sSeeThruLine  *line [ 200 ];
+    sSeeThruLine **line;
     int            noNeighbors;
-    sSectorStuff  *neighbor [ 100 ];
+    sSectorStuff **neighbor;
     int            noChildren;
-    sSectorStuff  *child [ 100 ];
-    bool           isChild;
+    sSectorStuff  *parent;
 };
 
 int            loRow;
 int            hiRow;
 
-int            blockMapScale;
 wBlockMap             *blockMap;
 sBlockMapArrayEntry ***blockMapArray;
 
@@ -125,6 +125,9 @@ int            noSeeThruLines;
 sSeeThruLine  *seeThruLines;
 
 sSectorStuff  *sector;
+sSeeThruLine **sectorLines;
+sSectorStuff **neighborList;
+bool          *isChild;
 
 int            checkLineSize;
 bool          *checkLine;
@@ -138,6 +141,9 @@ static long    X, Y, DX, DY;
 
 extern void Status ( char * );
 
+//
+// Run through our rejectTable to create the actual REJECT resource
+//
 wReject *GetREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
 {
     int noSectors = level->SectorCount ();
@@ -175,7 +181,7 @@ wReject *GetREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
     return ( wReject * ) reject;
 }
 
-void UpdateProgress ( float percentDone )
+void UpdateProgress ( double percentDone )
 {
     char buffer [ 25 ];
     sprintf ( buffer, "REJECT: %5.1f%% done", percentDone );
@@ -192,30 +198,21 @@ void MarkVisibility ( int sector1, int sector2, eVisibility visibility )
     }
 }
 
-void PrepareVertices ( DoomLevel *level )
+void CopyVertices ( DoomLevel *level )
 {
-    level->PackVertices ();
     int noVertices = level->VertexCount ();
     vertices = new sPoint [ noVertices ];
     const wVertex *vertex = level->GetVertices ();
 
-    int loX = vertex [0].x, loY = vertex [0].y;
-    int hiX = vertex [0].x, hiY = vertex [0].y;
-    for ( int i = 1; i < noVertices; i++ ) {
-        if ( vertex [i].x < loX ) loX = vertex [i].x;
-        if ( vertex [i].x > hiX ) hiX = vertex [i].x;
-        if ( vertex [i].y < loY ) loY = vertex [i].y;
-        if ( vertex [i].y > hiY ) hiY = vertex [i].y;
-    }
-    int scaleX = 0x00010000 / ( hiX - loX );
-    int scaleY = 0x00010000 / ( hiY - loY );
-    blockMapScale = ( scaleX < scaleY ) ? scaleX : scaleY;
     for ( int i = 0; i < noVertices; i++ ) {
-        vertices [i].x = blockMapScale * vertex [i].x;
-        vertices [i].y = blockMapScale * vertex [i].y;
+        vertices [i].x = vertex [i].x;
+        vertices [i].y = vertex [i].y;
     }
 }
 
+//
+// Create lists of all the solid and see-thru lines in the map
+//
 bool SetupLines ( DoomLevel *level )
 {
     int noLineDefs = level->LineDefCount ();
@@ -242,7 +239,7 @@ bool SetupLines ( DoomLevel *level )
             int rSide = lineDef[i].sideDef [ RIGHT_SIDEDEF ];
             int lSide = lineDef[i].sideDef [ LEFT_SIDEDEF ];
             if (( lSide == NO_SIDEDEF ) || ( rSide == NO_SIDEDEF )) continue;
-            if ( lSide == rSide ) continue;
+            if ( sideDef [ lSide ].sector == sideDef [ rSide ].sector ) continue;
             sSeeThruLine *stLine = &seeThruLines [ noSeeThruLines++ ];
             line = ( sWADLine * ) stLine;
             stLine->leftSector = sideDef [ lSide ].sector;
@@ -265,55 +262,60 @@ bool SetupLines ( DoomLevel *level )
     return ( noSeeThruLines > 0 ) ? true : false;
 }
 
+//
+// Mark sectors sec1 & sec2 as neighbors of each other
+//
 void MakeNeighbors ( sSectorStuff *sec1, sSectorStuff *sec2 )
 {
     for ( int i = 0; i < sec1->noNeighbors; i++ ) {
         if ( sec1->neighbor [i] == sec2 ) return;
     }
+
     sec1->neighbor [ sec1->noNeighbors++ ] = sec2;
     sec2->neighbor [ sec2->noNeighbors++ ] = sec1;
 }
 
+//
+// Add sec2 to sec1's list of children
+//
 void AddChild ( sSectorStuff *sec1, sSectorStuff *sec2 )
 {
-    // Make sure sec2 isn't arlready in the list of children
-    for ( int i = 0; i < sec1->noChildren; i++ ) {
-        if ( sec1->child [ i ] == sec2 ) return;
-    }
-    // Add sec2 to the list
-    sec1->child [ sec1->noChildren++ ] = sec2;
 }
 
+//
+// Mark sec2 and all it's children as children of sec1
+//
 void MakeChild ( sSectorStuff *sec1, sSectorStuff *sec2 )
 {
     for ( int i = 0; i < sec1->noNeighbors; i++ ) {
-        if ( sec1->neighbor [i] == sec2 ) {
-            // Remove sec2 from the list of neighboring sectors
-            memcpy ( sec1->neighbor + i, sec1->neighbor + i + 1, sizeof ( sSectorStuff * ) * ( sec1->noNeighbors-- - i - 1 ));
-            // Remove any neighboring lines from sec1's list of active lines
-            for ( int j = 0; j < sec2->noLines; j++ ) {
-                if ( sec2->line [j] != NULL ) {
-                    for ( int k = 0; k < sec1->noLines; k++ ) {
-                        if ( sec1->line [k] == sec2->line [j] ) {
-                            sec1->line [k] = NULL;
-                            sec1->noActiveLines--;
-                            break;
-                        }
+        if ( sec1->neighbor [i] != sec2 ) continue;
+
+        // Remove sec2 from the list of neighboring sectors
+        memcpy ( sec1->neighbor + i, sec1->neighbor + i + 1, sizeof ( sSectorStuff * ) * ( sec1->noNeighbors-- - i - 1 ));
+
+        // Remove any neighboring lines from sec1's list of active lines
+        for ( int j = 0; j < sec2->noLines; j++ ) {
+            if ( sec2->line [j] != NULL ) {
+                for ( int k = 0; k < sec1->noLines; k++ ) {
+                    if ( sec1->line [k] == sec2->line [j] ) {
+                        sec1->line [k] = NULL;
+                        sec1->noActiveLines--;
+                        break;
                     }
                 }
             }
-            // Add sec2 and all of it's children to sec1's list of children
-            AddChild ( sec1, sec2 );
-            for ( int i = 0; i < sec2->noChildren; i++ ) {
-                AddChild ( sec1, sec2->child [i]);
-            }
-            // Mark sec2 as a child sector
-            sec2->isChild = true;
-            return;
         }
+
+        sec2->parent = sec1;
+        sec1->noChildren += sec2->noChildren + 1;
+
+        return;
     }
 }
 
+//
+// Find all sectors that are children of others and move them to the child list of the parent
+//
 void FindChildren ( DoomLevel *level )
 {
     int noSectors = level->SectorCount ();
@@ -323,7 +325,7 @@ void FindChildren ( DoomLevel *level )
     do {
         more = false;
         for ( int i = 0; i < noSectors; i++ ) {
-            if (( sector [i].isChild == false ) && ( sector [i].noNeighbors == 1 )) {
+            if (( sector [i].parent == NULL ) && ( sector [i].noNeighbors == 1 )) {
                 MakeChild ( sector [i].neighbor [0], &sector [i] );
                 more = true;
             }
@@ -333,6 +335,10 @@ void FindChildren ( DoomLevel *level )
     // Any more ideas on finding groups of children?
 }
 
+//
+// Create the sector table that records all the see-thru lines related to a
+//   sector and all of it's neighboring and child sectors.
+//
 void CreateSectorInfo ( DoomLevel *level )
 {
     int noSectors  = level->SectorCount ();
@@ -340,12 +346,34 @@ void CreateSectorInfo ( DoomLevel *level )
     sector = new sSectorStuff [ noSectors ];
     memset ( sector, 0, sizeof ( sSectorStuff ) * noSectors );
 
+    isChild = new bool [ noSectors ];
+
+    // Count the number of lines for each sector first
+    for ( int i = 0; i < noSeeThruLines; i++ ) {
+        sSeeThruLine *stLine = &seeThruLines [ i ];
+        sector [ stLine->leftSector ].noLines++;
+        sector [ stLine->rightSector ].noLines++;
+    }
+
+    // Set up the line & neighbor array for each sector
+    sSeeThruLine **lines = sectorLines = new sSeeThruLine * [ noSeeThruLines * 2 ];
+    sSectorStuff **neighbors = neighborList = new sSectorStuff * [ noSeeThruLines * 2 ];
+    for ( int i = 0; i < noSectors; i++ ) {
+        sector [i].line = lines;
+        sector [i].neighbor = neighbors;
+        lines += sector [i].noLines;
+        neighbors += sector [i].noLines;
+        sector [i].noLines = 0;
+    }
+
     // Fill in line information & mark off neighbors
     for ( int i = 0; i < noSeeThruLines; i++ ) {
         sSeeThruLine *stLine = &seeThruLines [ i ];
-        sector [ stLine->leftSector ].line [ sector [ stLine->leftSector ].noLines++ ] = stLine;
-        sector [ stLine->rightSector ].line [ sector [ stLine->rightSector ].noLines++ ] = stLine;
-        MakeNeighbors ( &sector [ stLine->leftSector ], &sector [ stLine->rightSector ]);
+        sSectorStuff *sec1 = &sector [ stLine->leftSector ];
+        sSectorStuff *sec2 = &sector [ stLine->rightSector ];
+        sec1->line [ sec1->noLines++ ] = stLine;
+        sec2->line [ sec2->noLines++ ] = stLine;
+        MakeNeighbors ( sec1, sec2 );
     }
 
     // Start with all lines as 'active'
@@ -362,7 +390,7 @@ void EliminateTrivialCases ( DoomLevel *level )
 
     // Mark all sectors with no see-thru lines as hidden
     for ( int i = 0; i < noSectors; i++ ) {
-        if ( sector [i].noActiveLines == 0 ) {
+        if ( sector [i].noLines == 0 ) {
             for ( int j = 0; j < noSectors; j++ ) {
                 MarkVisibility ( i, j, visHidden );
             }
@@ -381,7 +409,7 @@ void EliminateTrivialCases ( DoomLevel *level )
     }
 }
 
-bool DontBother ( sSeeThruLine *srcLine, sSeeThruLine *tgtLine )
+bool DontBother ( const sSeeThruLine *srcLine, const sSeeThruLine *tgtLine )
 {
     if (( rejectTable [ srcLine->leftSector ].sector [ tgtLine->leftSector ] != visUnknown ) &&
         ( rejectTable [ srcLine->leftSector ].sector [ tgtLine->rightSector ] != visUnknown ) &&
@@ -411,6 +439,11 @@ void CleanUpREJECT ( int noSectors )
 void PrepareBLOCKMAP ( DoomLevel *level )
 {
     blockMap = ( wBlockMap * ) level->GetBlockMap ();
+    if ( blockMap == NULL ) {
+        CreateBLOCKMAP ( level, true );
+        blockMap = ( wBlockMap * ) level->GetBlockMap ();
+    }
+
     USHORT *offset = ( USHORT * ) ( blockMap + 1 );
     blockMapArray = new sBlockMapArrayEntry ** [ blockMap->noRows ];
     blockMapBounds = new sBlockMapBounds [ blockMap->noRows ];
@@ -458,13 +491,21 @@ void CleanUpBLOCKMAP ()
     delete [] blockMapArray;
 }
 
+//
+// Adjust the two line so that:
+//   1) If one line bisects the other:
+//      a) The bisecting line is tgt
+//      b) The point farthest from src is made both start & end
+//   2) tgt is on the left side of src
+//   3) src and tgt go in 'opposite' directions
+//
 bool AdjustLinePair ( sSeeThruLine *src, sSeeThruLine *tgt, bool *swapped )
 {
     *swapped = false;
 
 start:
 
-    // Rotate & Translate tgt so that src lies along the +X asix
+    // Rotate & Translate so that src lies along the +X asix
     long y1 = src->DX * ( tgt->start->y - src->start->y ) - src->DY * ( tgt->start->x - src->start->x );
     long y2 = src->DX * (  tgt->end->y  - src->start->y ) - src->DY * (  tgt->end->x  - src->start->x );
 
@@ -474,11 +515,15 @@ start:
     // Make sure that src doesn't bi-sect tgt
     if ((( y1 > 0 ) && ( y2 < 0 )) || (( y1 < 0 ) && ( y2 > 0 ))) {
         Swap ( *src, *tgt );
+        // See if these two lines actually intersect
+        if ( *swapped == true ) {
+            return false;
+        }
         *swapped = true;
         goto start;
     }
 
-    // Make sure that tgt will end up on the correct ( left ) side
+    // Make sure that tgt will end up on the correct (left) side
     if (( y1 <= 0 ) && ( y2 <= 0 )) {
         // Flip src
         Swap ( src->start, src->end );
@@ -497,6 +542,7 @@ start:
         return true;
     }
 
+    // Now look at src from tgt's point of view
     long x1 = tgt->DX * ( src->start->y - tgt->start->y ) - tgt->DY * ( src->start->x - tgt->start->x );
     long x2 = tgt->DX * (  src->end->y  - tgt->start->y ) - tgt->DY * (  src->end->x  - tgt->start->x );
 
@@ -534,10 +580,10 @@ void UpdateRow ( int column, int row )
 
 void DrawBlockMapLine ( const sPoint *p1, const sPoint *p2 )
 {
-    long x0 = p1->x / blockMapScale - blockMap->xOrigin;
-    long y0 = p1->y / blockMapScale - blockMap->yOrigin;
-    long x1 = p2->x / blockMapScale - blockMap->xOrigin;
-    long y1 = p2->y / blockMapScale - blockMap->yOrigin;
+    long x0 = p1->x - blockMap->xOrigin;
+    long y0 = p1->y - blockMap->yOrigin;
+    long x1 = p2->x - blockMap->xOrigin;
+    long y1 = p2->y - blockMap->yOrigin;
 
     int startX = x0 / 128, startY = y0 / 128;
     int endX = x1 / 128, endY = y1 / 128;
@@ -967,6 +1013,7 @@ bool CorrectForNewStart ( sPolyLine *poly )
             poly->point [i-1] = p0;
             poly->point += i - 1;
             poly->noPoints -= i - 1;
+            poly->lastPoint -= i - 1;
             return true;
         }
     }
@@ -995,7 +1042,6 @@ bool AdjustEndPoints ( sSeeThruLine *left, sSeeThruLine *right, sPolyLine *upper
 {
     if ( upper->lastPoint == -1 ) return true;
     const sPoint *test = upper->point [ upper->lastPoint ];
-    upper->lastPoint = -1;
 
     long dx, dy, y;
     bool changed = false;
@@ -1044,11 +1090,11 @@ bool FindPolyLines ( sWorldInfo *world )
     sPolyLine *upperPoly = &world->upperPoly;
     sPolyLine *lowerPoly = &world->lowerPoly;
 
-    bool done;
     for ( EVER ) {
 
-        done = true;
+        bool done = true;
         bool stray = false;
+
         for ( int i = world->loIndex; i <= world->hiIndex; i++ ) {
 
             sSolidLine *line = world->testLines [ i ];
@@ -1066,7 +1112,7 @@ bool FindPolyLines ( sWorldInfo *world )
                         case  0 : // Intersects the upper/left poly-Line
                             if ( stray ) done = false;
                             AddToPolyLine ( upperPoly, line );
-                            if ( PolyLinesCross ( upperPoly, lowerPoly )) {
+                            if (( lowerPoly->noPoints > 2 ) && ( PolyLinesCross ( upperPoly, lowerPoly ))) {
                                 return false;
                             }
                             if ( AdjustEndPoints ( world->src, world->tgt, upperPoly, lowerPoly ) == false ) {
@@ -1094,6 +1140,7 @@ bool FindPolyLines ( sWorldInfo *world )
 
             }
         }
+
         if ( done ) break;
 
         while ( world->testLines [ world->loIndex ]->ignore ) {
@@ -1112,11 +1159,13 @@ bool FindPolyLines ( sWorldInfo *world )
 bool FindObstacles ( sWorldInfo *world )
 {
     if ( world->hiIndex < world->loIndex ) return false;
+
+    // If we have an unbroken line between src & tgt there is a direct LOS
     if ( world->upperPoly.noPoints == 2 ) return false;
     if ( world->lowerPoly.noPoints == 2 ) return false;
 
     // To be absolutely correct, we should create a list of obstacles
-    // ( ie: connected lineDefs completely enclosed by upperPoly & lowerPoly )
+    // (ie: connected lineDefs completely enclosed by upperPoly & lowerPoly)
     // and see if any of them completely block the LOS
  
     return false;
@@ -1159,18 +1208,22 @@ bool CheckLOS ( sSeeThruLine *src, sSeeThruLine *tgt )
     sWorldInfo myWorld;
     InitializeWorld ( &myWorld, src, tgt );
 
+    // See if there are any solid lines in the blockmap region between src & tgt
     if ( FindInterveningLines ( &myWorld ) == true ) {
 
+       // Do a more refined check to see if there are any lines
         switch ( TrimLines ( &myWorld )) {
 
             case -1 :		// A single line completely blocks the view
                 return false;
 
-            case 0 :		// No intervening lines left end check
+            case 0 :		// No intervening lines left - end check
                 break;
 
             default :
+                // Do an even more refined check
                 if ( FindPolyLines ( &myWorld ) == false ) return false;
+                // Now see if there are any obstacles that may block the LOS
                 if ( FindObstacles ( &myWorld ) == true ) return false;
         }
     }
@@ -1178,7 +1231,7 @@ bool CheckLOS ( sSeeThruLine *src, sSeeThruLine *tgt )
     return true;
 }
 
-bool DivideRegion ( sSeeThruLine *srcLine, sSeeThruLine *tgtLine, bool swapped, sSeeThruLine *src, sSeeThruLine *tgt )
+bool DivideRegion ( const sSeeThruLine *srcLine, const sSeeThruLine *tgtLine, bool swapped, sSeeThruLine *src, sSeeThruLine *tgt )
 {
     // Find the two end-points for tgt
     const sPoint *nearPoint;
@@ -1229,7 +1282,7 @@ bool DivideRegion ( sSeeThruLine *srcLine, sSeeThruLine *tgtLine, bool swapped, 
     return isVisible;
 }
 
-bool TestLinePair ( sSeeThruLine *srcLine, sSeeThruLine *tgtLine )
+bool TestLinePair ( const sSeeThruLine *srcLine, const sSeeThruLine *tgtLine )
 {
     if ( DontBother ( srcLine, tgtLine )) {
         return false;
@@ -1243,6 +1296,7 @@ bool TestLinePair ( sSeeThruLine *srcLine, sSeeThruLine *tgtLine )
         return false;
     }
 
+    // See if one line bisects the other
     if ( tgt.start == tgt.end ) {
         return DivideRegion ( srcLine, tgtLine, swapped, &src, &tgt );
     }
@@ -1251,27 +1305,37 @@ bool TestLinePair ( sSeeThruLine *srcLine, sSeeThruLine *tgtLine )
 }
 
 //----------------------------------------------------------------------------
-//  Sort sectors so the the largest ( sector containing the most sectors ) is
+//  Sort sectors so the the largest (sector containing the most sectors) is
 //    placed first in the list.
 //----------------------------------------------------------------------------
-
 int SortSector ( const void *ptr1, const void *ptr2 )
 {
     const sSectorStuff *sec1 = ( const sSectorStuff * ) ptr1;
     const sSectorStuff *sec2 = ( const sSectorStuff * ) ptr2;
 
+    // Favor number of children
     if ( sec1->noChildren != sec2->noChildren ) {
         return sec2->noChildren - sec1->noChildren;
     }
-    if ( sec1->isChild != sec2->isChild ) {
-        return sec1->isChild ? 1 : -1;
+    // Favor sectors without a parent next
+    if (( sec1->parent != NULL ) != ( sec2->parent != NULL )) {
+        return ( sec1->parent != NULL ) ? 1 : -1;
     }
+    // Favor the sector with the most visible lines
     if ( sec2->noActiveLines != sec1->noActiveLines ) {
         return sec2->noActiveLines - sec1->noActiveLines;
     }
+
+    // It's a tie - use the sector index - lower index favored
     return sec1 - sec2;
 }
 
+//----------------------------------------------------------------------------
+// Create a mapping for see-thru lines that tries to put lines that affect
+//   the most sectors first.  As more sectors are marked visible/hidden, the
+//   number of remaining line pairs that must be checked drops.  By ordering
+//   the lines, we can speed things up quite a bit for just a little effort.
+//----------------------------------------------------------------------------
 int SetupLineMap ( int *lineMap, int noSectors )
 {
     // Try to order lines to maximize our chances of culling child sectors
@@ -1296,8 +1360,6 @@ int SetupLineMap ( int *lineMap, int noSectors )
 
     delete [] sectorCopy;
 
-    if ( maxIndex != noSeeThruLines ) fprintf ( stderr, "\n\n!!!! HELP (maxIndex=%d,noSeeThruLines=%d) !!!!\n\n", maxIndex, noSeeThruLines );
-
     return maxIndex;
 }
 
@@ -1314,21 +1376,33 @@ void LineComplete ( int sectorIndex, sSeeThruLine *line, int noSectors )
             // If we've looked at all the active see-thru lines for a sector,
             //   then anything that isn't already visible is hidden!
             if ( --sec->noActiveLines == 0 ) {
+
+                // Make a list of all children of this sector
+                if ( sec->noChildren > 0 ) {
+                    for ( int j = 0; j < noSectors; j++ ) {
+                        sSectorStuff  *parent = sector [j].parent;
+                        while (( parent != NULL ) && ( parent != sec )) parent = parent->parent;
+                        isChild [j] = ( parent != NULL ) ? true : false;
+                    }
+                }
+
                 for ( int j = 0; j < noSectors; j++ ) {
                     // Don't mark sectors we already know are visible
                     if ( rejectTable [ sectorIndex ].sector [ j ] != visUnknown ) continue;
-                    // Don't mark sectors that are children
-                    for ( int k = 0; k < sec->noChildren; k++ ) {
-                        if ( j == sec->child [k] - sector ) goto next;
-                    }
+
+                    // Don't mark children as hidden to the parent
+                    if ( isChild [j] ) continue;
+
                     // Mark this sector as invisible to the rest of the world
                     MarkVisibility ( sectorIndex, j, visHidden );
+
                     // Mark all of it's children as invisible to the rest of the world too
-                    for ( int k = 0; k < sec->noChildren; k++ ) {
-                        MarkVisibility ( sec->child [k] - sector, j, visHidden );
+                    if ( sec->noChildren > 0 ) {
+                        for ( int k = 0; k < noSectors; k++ ) {
+                            if ( isChild [k] == false ) continue;
+                            MarkVisibility ( k, j, visHidden );
+                        }
                     }
-next :
-                    ; // Microsoft compiler is acting up
                 }
             }
             return;
@@ -1339,14 +1413,14 @@ next :
 void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
 {
     int noSectors = level->SectorCount ();
-    bool saveBits = level->hasChanged ();
+    bool saveBits = level->hasChanged () ? false : true;
     if ( empty ) {
         level->NewReject ((( noSectors * noSectors ) + 7 ) / 8, GetREJECT ( level, true, efficiency ), saveBits );
         return;
     }
 
     PrepareREJECT ( noSectors );
-    PrepareVertices ( level );
+    CopyVertices ( level );
 
     // Make sure we have something worth doing
     if ( SetupLines ( level )) {
@@ -1368,17 +1442,19 @@ void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
         int *lineMap = new int [ noSeeThruLines ];
         int lineMapSize = SetupLineMap ( lineMap, noSectors );
 
-        // Set up a scaled BLOCKMAP structure
+        // Set up a scaled BLOCKMAP type structure
         PrepareBLOCKMAP ( level );
 
-        int done = 0, total = noSeeThruLines * ( noSeeThruLines - 1 ) / 2, lastProgress = -1;
+        int done = 0, total = noSeeThruLines * ( noSeeThruLines - 1 ) / 2;
+        double nextProgress = 0.0;
 
         // Now the tough part: check all lines against each other
         for ( int i = 0; i < lineMapSize; i++ ) {
             sSeeThruLine *srcLine = &seeThruLines [ lineMap [ i ]];
-            for ( int j = i + 1; j < lineMapSize; j++ ) {
+            for ( int j = lineMapSize - 1; j > i; j-- ) {
                 sSeeThruLine *tgtLine = &seeThruLines [ lineMap [ j ]];
                 if ( TestLinePair ( srcLine, tgtLine ) == true ) {
+                    // There is a direct LOS between the two lines - mark all affected sectors
                     MarkVisibility ( srcLine->leftSector, tgtLine->leftSector, visVisible );
                     MarkVisibility ( srcLine->leftSector, tgtLine->rightSector, visVisible );
                     MarkVisibility ( srcLine->rightSector, tgtLine->leftSector, visVisible );
@@ -1392,21 +1468,25 @@ void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
 
             // Update the progress indicator to let the user know we're not hung
             done += lineMapSize - ( i + 1 );
-            int progress = ( 1000 * done ) / total;
-            if ( progress != lastProgress ) {
-                UpdateProgress (( float ) ( progress / 10.0 ));
-                lastProgress = progress;
+            double progress = ( 100.0 * done ) / total;
+            if ( progress >= nextProgress ) {
+                UpdateProgress ( progress );
+                nextProgress = progress + 0.1;
             }
         }
 
         CleanUpBLOCKMAP ();
 
+        // Clean up allocations we made
         delete [] lineMap;
         delete [] polyPoints;
         delete [] testLines;
         delete [] checkLine;
 
         // Clean up allocations made by CreateSectorInfo
+        delete [] neighborList;
+        delete [] sectorLines;
+        delete [] isChild;
         delete [] sector;
 
     }
@@ -1417,7 +1497,10 @@ void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
     delete [] solidLines;
     delete [] seeThruLines;
     delete [] indexToSolid;
+
+    // Delete our local copy of the vertices
     delete [] vertices;
 
+    // Finally, release our reject table data
     CleanUpREJECT ( noSectors );
 }

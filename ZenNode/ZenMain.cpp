@@ -74,7 +74,7 @@
     cLogger *gLogger = &myLogger;
 #endif
 
-#define VERSION		"1.00"
+#define VERSION		"1.0.1"
 #define BANNER          "ZenNode Version " VERSION " (c) 1994-2000 Marc Rousseau\r\n\r\n"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
@@ -108,214 +108,20 @@ struct {
     bool  Extract;
 } config;
 
-static ULONG startX, startY;
-static char  progress [4] = { 0x7C, 0x2F, 0x2D, 0x5C };
-static int   progressIndex;
+extern ULONG startX, startY;
+
+void SaveConsoleSettings ();
+void RestoreConsoleSettings ();
 
 #if defined ( __OS2__ )
 
 #define SEPERATOR	'\\'
 #define DEFAULT_CHAR	'û'
 
-#define SaveConsoleSettings()				\
-    VIOCURSORINFO vioco;				\
-    VioGetCurType ( &vioco, 0 );			\
-    int oldAttr = vioco.attr;				\
-    vioco.attr = 0xFFFF;				\
-    VioSetCurType ( &vioco, 0 )
-
-#define RestoreConsoleSettings()			\
-    vioco.attr = oldAttr;				\
-    VioSetCurType ( &vioco, 0 )
-
-static ULONG sx, sy;
-
-void GetXY ( ULONG *x, ULONG *y )
-{
-    VioGetCurPos ( y, x, 0 );
-}
-
-void GotoXY ( ULONG x, ULONG y )
-{
-    VioSetCurPos ( y, x, 0 );
-}
-
-ULONG CurrentTime ()
-{
-    ULONG time;
-    DosQuerySysInfo ( QSV_MS_COUNT, QSV_MS_COUNT, &time, 4 );
-    return time;
-}
-
-void Status ( char *message )
-{
-    int len = strlen ( message );
-    VioWrtCharStr (( BYTE * ) message, len, startY, startX, 0 );
-    VioWrtNChar (( BYTE * )  " ", 80 - ( startX + len ), startY, startX + len, 0 );
-    sy = startY;
-    sx = startX + len;
-}
-
-void GoRight ()
-{
-    VioWrtNChar (( BYTE * )  "R", 1, sy, sx++, 0 );
-}
-
-void GoLeft ()
-{
-    VioWrtNChar (( BYTE * )  "L", 1, sy, sx - 1 , 0 );
-}
-
-void Backup ()
-{
-    sx--;
-}
-
-void ShowDone ()
-{
-    VioWrtNChar (( BYTE * )  "*", 1, sy, sx, 0 );
-}
-
-void ShowProgress ()
-{
-    VioWrtNChar (( BYTE * ) &progress [ progressIndex++ % SIZE ( progress )], 1, sy, sx, 0 );
-}
-
-void MoveUp ( int delta )
-{
-    sy -= delta;
-    VioSetCurPos ( sy, 0, 0 );
-}
-
-void MoveDown ( int delta )
-{
-    sy += delta;
-    VioSetCurPos ( sy, 0, 0 );
-}
-
 #elif defined ( __WIN32__ )
 
 #define SEPERATOR	'\\'
 #define DEFAULT_CHAR	'û'
-
-#define SaveConsoleSettings()				\
-    hOutput = GetStdHandle ( STD_OUTPUT_HANDLE );	\
-    GetConsoleCursorInfo ( hOutput, &cursorInfo );	\
-    oldVisible = cursorInfo.bVisible;			\
-    cursorInfo.bVisible = false;			\
-    SetConsoleCursorInfo ( hOutput, &cursorInfo );	\
-    SetUnhandledExceptionFilter ( myHandler );		\
-    signal ( SIGBREAK, SignalHandler );			\
-    signal ( SIGINT, SignalHandler )
-
-#define RestoreConsoleSettings()			\
-    cursorInfo.bVisible = oldVisible;			\
-    SetConsoleCursorInfo ( hOutput, &cursorInfo )
-
-static CONSOLE_SCREEN_BUFFER_INFO screenBufferInfo;
-static CONSOLE_CURSOR_INFO        cursorInfo;
-static BOOL                       oldVisible;
-
-static HANDLE     hOutput;
-static COORD      currentPos;
-
-long WINAPI myHandler ( PEXCEPTION_POINTERS )
-{
-    RestoreConsoleSettings ();
-
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-void SignalHandler ( int )
-{
-    RestoreConsoleSettings ();
-    cprintf ( "\r\n" );
-    exit ( -1 );
-}
-
-ULONG CurrentTime ()
-{
-    return GetCurrentTime ();
-}
-
-
-void GetXY ( ULONG *x, ULONG *y )
-{
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
-    *x = screenBufferInfo.dwCursorPosition.X;
-    *y = screenBufferInfo.dwCursorPosition.Y;
-}
-
-void GotoXY ( ULONG x, ULONG y )
-{
-    COORD pos;
-    pos.X = ( short ) x;
-    pos.Y = ( short ) y;
-    SetConsoleCursorPosition ( hOutput, pos );
-}
-
-void Status ( char *message )
-{
-    DWORD count;
-    int len = strlen ( message );
-    currentPos.X = ( short ) startX;
-    currentPos.Y = ( short ) startY;
-    if ( len ) {
-        WriteConsoleOutputCharacter ( hOutput, message, len, currentPos, &count );
-        currentPos.X += ( SHORT ) len;
-    }
-    FillConsoleOutputCharacter ( hOutput, ' ', 80 - currentPos.X, currentPos, &count );
-}
-
-void GoRight ()
-{
-    DWORD count;
-    WriteConsoleOutputCharacter ( hOutput, "R", 1, currentPos, &count );
-    currentPos.X++;
-}
-
-void GoLeft ()
-{
-    DWORD count;
-    currentPos.X--;
-    WriteConsoleOutputCharacter ( hOutput, "L", 1, currentPos, &count );
-    currentPos.X++;
-}
-
-void Backup ()
-{
-    currentPos.X--;
-}
-
-void ShowDone ()
-{
-    DWORD count;
-    WriteConsoleOutputCharacter ( hOutput, "*", 1, currentPos, &count );
-}
-
-void ShowProgress ()
-{
-    DWORD count;
-    WriteConsoleOutputCharacter ( hOutput, &progress [ progressIndex++ % SIZE ( progress )], 1, currentPos, &count );
-}
-
-void MoveUp ( int delta )
-{
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
-    COORD pos;
-    pos.X = ( short ) 0;
-    pos.Y = ( short ) screenBufferInfo.dwCursorPosition.Y - delta;
-    SetConsoleCursorPosition ( hOutput, pos );
-}
-
-void MoveDown ( int delta )
-{
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
-    COORD pos;
-    pos.X = ( short ) 0;
-    pos.Y = ( short ) screenBufferInfo.dwCursorPosition.Y + delta;
-    SetConsoleCursorPosition ( hOutput, pos );
-}
 
 #elif defined ( __GNUC__ )
 
@@ -325,169 +131,23 @@ void MoveDown ( int delta )
 #define stricmp strcasecmp
 #define cprintf printf
 
-static termios stored;
-static int lastChar;
-static int keyhit;
-
 extern char *strupr ( char *ptr );
+extern int getch ();
+extern bool kbhit ();
 
-int getch ()
-{    
-    int retVal = lastChar;
-    lastChar = 0;
-
-    while ( keyhit == 0 ) {
-        keyhit = read ( STDIN_FILENO, &retVal, sizeof ( retVal ));
-    }
-
-    keyhit = 0;
-
-    return retVal;
-}
-
-bool kbhit ()
-{
-    if ( keyhit == 0 ) {
-        keyhit = read ( STDIN_FILENO, &lastChar, sizeof ( lastChar ));
-    }
-
-    return ( keyhit != 0 ) ? true : false;
-}
-
-void SaveConsoleSettings ();
-void RestoreConsoleSettings ();
-
-void SignalHandler ( int signal )
-{
-    struct sigaction sa;
-    memset ( &sa, 0, sizeof ( sa ));
-    sa.sa_handler = SIG_DFL;
-    switch ( signal ) {
-        case SIGINT :
-            RestoreConsoleSettings ();
-            printf ( "\r\n" );
-            exit ( -1 );
-            break;
-        case SIGTSTP :
-            RestoreConsoleSettings ();
-            printf ( "\r\n" );
-            sigaction ( SIGTSTP, &sa, NULL );
-            kill ( getpid (), SIGTSTP );
-            break;
-        case SIGCONT :
-            SaveConsoleSettings ();
-            break;
-    }
-}
-
-void SaveConsoleSettings ()
-{
-    termios newterm;
-    tcgetattr ( 0, &stored );
-    memcpy ( &newterm, &stored, sizeof ( struct termios ));
-    // Disable echo
-    newterm.c_lflag &= ~ECHO;
-    // Disable canonical mode, and set buffer size to 1 byte
-    newterm.c_lflag &= ~ICANON;
-    newterm.c_cc[VTIME] = 0;
-    newterm.c_cc[VMIN] = 0;
-
-    tcsetattr ( 0, TCSANOW, &newterm );
-
-    // Hide the cursor
-    printf ( "\033[?25l" );
-    fflush ( stdout );
-
-    struct sigaction sa;
-    memset ( &sa, 0, sizeof ( sa ));
-    sa.sa_handler = SignalHandler;
-    sigaction ( SIGINT, &sa, NULL );
-    sigaction ( SIGTSTP, &sa, NULL );
-    sigaction ( SIGCONT, &sa, NULL );
-}
-
-void RestoreConsoleSettings ()
-{
-    struct sigaction sa;
-    memset ( &sa, 0, sizeof ( sa ));
-    sa.sa_handler = SIG_DFL;
-    sigaction ( SIGINT, &sa, NULL );
-    sigaction ( SIGTSTP, &sa, NULL );
-    sigaction ( SIGCONT, &sa, NULL );
-
-    tcsetattr ( 0, TCSANOW, &stored );
-
-    // Restore the cursor
-    printf ( "\033[?25h" );
-    fflush ( stdout );
-}
-
-void GetXY ( ULONG *x, ULONG *y )
-{
-    *x = MAX_LUMP_NAME + 5;
-    *y = 0;
-}
-
-void GotoXY ( ULONG x, ULONG y )
-{
-    printf ( "\033[%dG", x );
-}
-
-ULONG CurrentTime ()
-{
-    timeval time;
-    gettimeofday ( &time, NULL );
-    return ( ULONG ) (( time.tv_sec * 1000 ) + ( time.tv_usec / 1000 ));
-}
-
-void Status ( char *message )
-{
-    printf ( "\033[%dG%s\033[K", startX, message );
-    fflush ( stdout );
-}
-
-void GoRight ()
-{
-    printf ( "R" );
-    fflush ( stdout );
-}
-
-void GoLeft ()
-{
-    printf ( "\033[DL" );
-    fflush ( stdout );
-}
-
-void Backup ()
-{
-    printf ( "\033[D" );
-    fflush ( stdout );
-}
-
-void ShowDone ()
-{
-    printf ( "*\033[D" );
-    fflush ( stdout );
-}
-
-void ShowProgress ()
-{
-    printf ( "%c\033[D", progress [ progressIndex++ % SIZE ( progress )] );
-    fflush ( stdout );
-}
-
-void MoveUp ( int delta )
-{
-    printf ( "\033[%dF", delta );
-    fflush ( stdout );
-}
-
-void MoveDown ( int delta )
-{
-    printf ( "\033[%dE", delta );
-    fflush ( stdout );
-}
 #endif
+
+void GetXY ( ULONG *x, ULONG *y );
+void GotoXY ( ULONG x, ULONG y );
+ULONG CurrentTime ();
+void Status ( char *message );
+void GoRight ();
+void GoLeft ();
+void Backup ();
+void ShowDone ();
+void ShowProgress ();
+void MoveUp ( int delta );
+void MoveDown ( int delta );
 
 void printHelp ()
 {
@@ -966,6 +626,8 @@ void PrintTime ( ULONG time )
 
 bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 {
+    ULONG dummyX = 0;
+
     *ellapsed = 0;
 
     cprintf ( "\r  %-*.*s: ", MAX_LUMP_NAME, MAX_LUMP_NAME, name );
@@ -1003,6 +665,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 
         PrintTime ( blockTime );
         cprintf ( "\r\n" );
+        GetXY ( &dummyX, &startY );
     }
 
     if ( config.Nodes.Rebuild ) {
@@ -1046,6 +709,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 
         PrintTime ( nodeTime );
         cprintf ( "\r\n" );
+        GetXY ( &dummyX, &startY );
     }
 
     if ( config.Reject.Rebuild ) {
@@ -1065,6 +729,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
                                                              oldEfficiency / 10, oldEfficiency % 10 );
         PrintTime ( rejectTime );
         cprintf ( "\r\n" );
+        GetXY ( &dummyX, &startY );
     }
 
     bool changed = false;
@@ -1074,7 +739,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
         Status ( "" );
         if ( changed ) {
             MoveUp ( rows );
-            cprintf ( " *" );
+            cprintf ( "\r *" );
             MoveDown ( rows );
         }
     } else {

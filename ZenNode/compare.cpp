@@ -26,25 +26,26 @@
 //
 //----------------------------------------------------------------------------
 
-#include <conio.h>
 #include <ctype.h>
-#include <dos.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "common.hpp"
 #include "wad.hpp"
 #include "level.hpp"
-#include "ZenNode.hpp"
 
 #if defined ( __OS2__ )
     #define INCL_DOS
     #define INCL_SUB
+    #include <conio.h>
+    #include <dos.h>
     #include <os2.h>
 #elif defined ( __WIN32__ )
+    #include <conio.h>
     #include <dos.h>
     #include <windows.h>
     #include <wincon.h>
+#elif defined ( __GNUC__ )
 #else
     #error This program must be compiled as a 32-bit app.
 #endif
@@ -63,166 +64,46 @@ void ProgError ( char *, ... )
 {
 }
 
-static USHORT startX, startY;
+extern ULONG startX, startY;
+
+void SaveConsoleSettings ();
+void RestoreConsoleSettings ();
 
 #if defined ( __OS2__ )
 
-#define SaveCursor()				\
-    VIOCURSORINFO vioco;			\
-    VioGetCurType ( &vioco, 0 );		\
-    int oldAttr = vioco.attr;			\
-    vioco.attr = 0xFFFF;			\
-    VioSetCurType ( &vioco, 0 )
+#define SEPERATOR	'\\'
+#define DEFAULT_CHAR	'û'
 
-#define RestoreCursor()				\
-    vioco.attr = oldAttr;			\
-    VioSetCurType ( &vioco, 0 )
-
-static USHORT sx, sy;
-
-void GetXY ( USHORT *x, USHORT *y )
-{
-    VioGetCurPos ( y, x, 0 );
-}
-
-void GotoXY ( USHORT x, USHORT y )
-{
-    VioSetCurPos ( y, x, 0 );
-}
-
-ULONG CurrentTime ()
-{
-    ULONG time;
-    DosQuerySysInfo ( QSV_MS_COUNT, QSV_MS_COUNT, &time, 4 );
-    return time;
-}
-
-void Status ( char *message )
-{
-    int len = strlen ( message );
-    VioWrtCharStr (( BYTE * ) message, len, startY, startX, 0 );
-    VioWrtNChar (( BYTE * )  " ", 80 - ( startX + len ), startY, startX + len, 0 );
-    sy = startY;
-    sx = startX + len;
-}
-
-void GoRight ()
-{
-    VioWrtNChar (( BYTE * )  "R", 1, sy, sx++, 0 );
-}
-
-void GoLeft ()
-{
-    VioWrtNChar (( BYTE * )  "L", 1, sy, sx - 1 , 0 );
-}
-
-void Backup ()
-{
-    sx--;
-}
-
-void ShowDone ()
-{
-    VioWrtNChar (( BYTE * )  "*", 1, sy, sx, 0 );
-}
-
-void ShowProgress ()
-{
-    static int x = 0;
-    static char progress [4] = { 0x7C, 0x2F, 0x2D, 0x5C };
-
-    VioWrtNChar (( BYTE * ) &progress [ x++ % 4 ], 1, sy, sx, 0 );
-}
-
 #elif defined ( __WIN32__ )
 
-#define SaveCursor()					\
-    hOutput = GetStdHandle ( STD_OUTPUT_HANDLE );	\
-    GetConsoleCursorInfo ( hOutput, &cursorInfo );	\
-    BOOL oldVisible = cursorInfo.bVisible;		\
-    cursorInfo.bVisible = false;			\
-    SetConsoleCursorInfo ( hOutput, &cursorInfo )
+#define SEPERATOR	'\\'
+#define DEFAULT_CHAR	'û'
 
-#define RestoreCursor()					\
-    cursorInfo.bVisible = oldVisible;			\
-    SetConsoleCursorInfo ( hOutput, &cursorInfo )
+#elif defined ( __GNUC__ )
 
-static CONSOLE_SCREEN_BUFFER_INFO screenBufferInfo;
-static CONSOLE_CURSOR_INFO        cursorInfo;
+#define SEPERATOR	'/'
+#define DEFAULT_CHAR	'*'
 
-static HANDLE     hOutput;
-static COORD      currentPos;
+#define stricmp strcasecmp
+#define cprintf printf
 
-ULONG CurrentTime ()
-{
-    return GetCurrentTime ();
-}
-
-
-void GetXY ( USHORT *x, USHORT *y )
-{
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
-    *x = screenBufferInfo.dwCursorPosition.X;
-    *y = screenBufferInfo.dwCursorPosition.Y;
-}
-
-void GotoXY ( USHORT x, USHORT y )
-{
-    COORD pos;
-    pos.X = x;
-    pos.Y = y;
-    SetConsoleCursorPosition ( hOutput, pos );
-}
-
-void Status ( char *message )
-{
-    DWORD count;
-    int len = strlen ( message );
-    currentPos.X = startX;
-    currentPos.Y = startY;
-    if ( len ) {
-        WriteConsoleOutputCharacter ( hOutput, message, len, currentPos, &count );
-        currentPos.X += ( SHORT ) len;
-    }
-    FillConsoleOutputCharacter ( hOutput, ' ', 80 - currentPos.X, currentPos, &count );
-}
-
-void GoRight ()
-{
-    DWORD count;
-    WriteConsoleOutputCharacter ( hOutput, "R", 1, currentPos, &count );
-    currentPos.X++;
-}
-
-void GoLeft ()
-{
-    DWORD count;
-    currentPos.X--;
-    WriteConsoleOutputCharacter ( hOutput, "L", 1, currentPos, &count );
-    currentPos.X++;
-}
-
-void Backup ()
-{
-    currentPos.X--;
-}
-
-void ShowDone ()
-{
-    DWORD count;
-    WriteConsoleOutputCharacter ( hOutput, "*", 1, currentPos, &count );
-}
-
-void ShowProgress ()
-{
-    static int x = 0;
-    static char progress [4] = { 0x7C, 0x2F, 0x2D, 0x5C };
-
-    DWORD count;
-    WriteConsoleOutputCharacter ( hOutput, &progress [ x++ % 4 ], 1, currentPos, &count );
-}
+extern char *strupr ( char *ptr );
+extern int getch ();
+extern bool kbhit ();
 
 #endif
+
+void GetXY ( ULONG *x, ULONG *y );
+void GotoXY ( ULONG x, ULONG y );
+ULONG CurrentTime ();
+void Status ( char *message );
+void GoRight ();
+void GoLeft ();
+void Backup ();
+void ShowDone ();
+void ShowProgress ();
+void MoveUp ( int delta );
+void MoveDown ( int delta );
 
 void printHelp ()
 {
@@ -340,6 +221,7 @@ const char *TypeName ( eWadType type )
         case wt_DOOM2   : return "DOOM2";
         case wt_HERETIC : return "Heretic";
         case wt_HEXEN   : return "Hexen"; 
+        default         : break;
     }		      
     return "<Unknown>";
 }
@@ -507,7 +389,7 @@ int main ( int argc, char *argv[] )
         return -1;
     }
 
-    SaveCursor ();
+    SaveConsoleSettings ();
 
     int argIndex = 1, changes = 0;
 
@@ -551,7 +433,7 @@ int main ( int argc, char *argv[] )
 
     } while ( argv [argIndex] );
 
-    RestoreCursor ();
+    RestoreConsoleSettings ();
 
     return changes;
 }

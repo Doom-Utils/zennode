@@ -35,10 +35,11 @@
 //   12-06-95	Added code to support selective unique sectors & don't splits
 //   05-09-96	Added nodePool to reduced calls to new/delete for NODEs
 //   05-15-96	Reduced memory requirements for convexList & sectorInfo
-//   05-23-96	Added XXX_FACTORs to reduced memory requirements
+//   05-23-96	Added FACTOR_XXX to reduced memory requirements
 //   05-24-96	Removed all calls to new/delete during CreateNode
 //   05-31-96	Made WhichSide inline & moved the bulk of code to _WhichSide
 //   10-01-96	Reordered functions & removed all function prototypes
+//   07-31-00   Increased max subsector factor from 15 to 256
 //
 //----------------------------------------------------------------------------
 
@@ -82,10 +83,13 @@
 #endif
 
 // Emperical values derived from a test of all the .WAD files from id & Raven.
-#define VERTEX_FACTOR	1.7		// 1.662791
-#define SEGS_FACTOR	2.0		// 1.488095
-#define NODE_FACTOR	2.1		// 1.030612
-#define SSECTOR_FACTOR	7.6		// 7.518518
+#define FACTOR_VERTEX		1.7		// 1.662791
+#define FACTOR_SEGS		2.0		// 1.488095
+#define FACTOR_NODE		2.2		// 1.030612
+//define FACTOR_SSECTOR		7.6		// 7.518518
+#define FACTOR_SSECTOR		50.0		// 7.518518
+
+#define FACTOR_SUBSECTORS	256
 
 static int       maxSegs;
 static int       maxVertices;
@@ -103,7 +107,7 @@ static int       ssectorsLeft;
 static wSSector *ssectorPool;
 static int       ssectorCount;			// Number of SSECTORS stored
 
-/*static*/ wVertex  *newVertices = NULL;
+static wVertex  *newVertices = NULL;
 static int       noVertices;
 
 //
@@ -173,7 +177,7 @@ static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
         if ( lineDef[i].sideDef[1] != NO_SIDEDEF ) maxSegs++;
     }
     tempSeg  = new SEG [ maxSegs ];
-    maxSegs  = ( int ) ( maxSegs * SEGS_FACTOR );
+    maxSegs  = ( int ) ( maxSegs * FACTOR_SEGS );
     segStart = new SEG [ maxSegs ];
     memset ( segStart, 0, sizeof ( SEG ) * maxSegs );
 
@@ -599,9 +603,11 @@ int SectorSort ( const void *ptr1, const void *ptr2 )
 
 sSectorInfo *GetSectorInfo ( int noSectors, wBound *bound )
 {
-    long max = noSectors * 15;
+    long max = noSectors * FACTOR_SUBSECTORS;
     long size = sizeof ( sSectorInfo ) * ( long ) noSectors + sizeof ( int ) * max;
     char *temp = new char [ size ];
+    memset ( temp, 0, size );
+
     sSectorInfo *info = ( sSectorInfo * ) temp;
     temp += sizeof ( sSectorInfo ) * noSectors;
 
@@ -614,10 +620,16 @@ sSectorInfo *GetSectorInfo ( int noSectors, wBound *bound )
                 ( bound[j].maxx <= bound[i].maxx ) &&
                 ( bound[j].miny >= bound[i].miny ) &&
                 ( bound[j].maxy <= bound[i].maxy )) {
-                info[i].subSector[info[i].noSubSectors++] = j;
+                int index = info[i].noSubSectors++;
+                if ( index >= max ) {
+                    fprintf ( stderr, "Too many contained sectors in sector %d\n", i );
+                    exit ( -1 );
+                }
+                info[i].subSector[index] = j;
             }
         }
         temp += sizeof ( int ) * info [i].noSubSectors;
+        max -= info [i].noSubSectors;
     }
 
     qsort ( info, noSectors, sizeof ( sSectorInfo ), SectorSort );
@@ -1089,11 +1101,11 @@ static void DivideSeg ( SEG *rSeg, SEG *lSeg )
     if ( sideS < 0 ) {
         rSeg->Data.end    = ( USHORT ) newIndex;
         lSeg->Data.start  = ( USHORT ) newIndex;
-        lSeg->Data.offset += ( USHORT ) hypot ( x - vertS->x, y - vertS->y );
+        lSeg->Data.offset += ( USHORT ) hypot (( double ) ( x - vertS->x ), ( double ) ( y - vertS->y ));
     } else {
         rSeg->Data.start  = ( USHORT ) newIndex;
         lSeg->Data.end    = ( USHORT ) newIndex;
-        rSeg->Data.offset += ( USHORT ) hypot ( x - vertS->x, y - vertS->y );
+        rSeg->Data.offset += ( USHORT ) hypot (( double ) ( x - vertS->x ), ( double ) ( y - vertS->y ));
     }
 }
 
@@ -1361,7 +1373,7 @@ void CreateNODES ( DoomLevel *level, sBSPOptions *options )
     } else {
         memset ( keepUnique, true, sizeof ( bool ) * sectorCount );
     }
-    maxVertices = ( int ) ( noVertices * VERTEX_FACTOR );
+    maxVertices = ( int ) ( noVertices * FACTOR_VERTEX );
     newVertices = new wVertex [ maxVertices ];
     memcpy ( newVertices, level->GetVertices (), sizeof ( wVertex ) * noVertices );
 
@@ -1393,7 +1405,8 @@ void CreateNODES ( DoomLevel *level, sBSPOptions *options )
                 sideInfo [alias][ segStart[i].Sector ] = SIDE_SPLIT;
             }
         }
-        delete [] sectInfo;
+
+        delete [] ( char * ) sectInfo;
         delete [] bound;
         delete [] aliasList;
 
@@ -1441,8 +1454,8 @@ void CreateNODES ( DoomLevel *level, sBSPOptions *options )
     Status ( "Creating NODES ... " );
     int noSegs = segCount;
     SEG *endSeg;
-    NODE *firstNode = nodePool = new NODE [ nodesLeft = ( int ) ( NODE_FACTOR * level->LineDefCount ()) ];
-    wSSector *firstSSector = ssectorPool = new wSSector [ ssectorsLeft = ( int ) ( SSECTOR_FACTOR * level->SectorCount ()) ];
+    NODE *firstNode = nodePool = new NODE [ nodesLeft = ( int ) ( FACTOR_NODE * level->LineDefCount ()) ];
+    wSSector *firstSSector = ssectorPool = new wSSector [ ssectorsLeft = ( int ) ( FACTOR_SSECTOR * level->SectorCount ()) ];
     CreateNode ( NULL, segStart, noSegs, endSeg );    		 		    
 
 #if defined ( DEBUG_TRACE )

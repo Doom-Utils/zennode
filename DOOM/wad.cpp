@@ -219,9 +219,11 @@ bool WAD::WriteEntry ( const wadDirEntry *entry, ULONG newSize, void *newStuff, 
         delete dirInfo [ index ].cacheData;
         dirInfo [ index ].cacheData = NULL;
     }
+
     dirInfo [ index ].newData = temp;
     directory [ index ].size = newSize;
     directory [ index ].offset = ( ULONG ) -1;
+
     return true;
 }
 
@@ -430,7 +432,7 @@ bool WAD::ReduceDirectory ( int holePos, int entries )
     return true;
 }
 
-int WAD::InsertBefore ( const wLumpName *name, ULONG newSize, void *newStuff, bool owner, const wadDirEntry *entry )
+bool WAD::InsertBefore ( const wLumpName *name, ULONG newSize, void *newStuff, bool owner, const wadDirEntry *entry )
 {
     ULONG index = indexOf ( entry );
     if ( entry && ( index == ( ULONG ) -1 )) return false;
@@ -444,7 +446,7 @@ int WAD::InsertBefore ( const wLumpName *name, ULONG newSize, void *newStuff, bo
     return WriteEntry ( newDir, newSize, newStuff, owner );
 }
 
-int WAD::InsertAfter ( const wLumpName *name, ULONG newSize, void *newStuff, bool owner, const wadDirEntry *entry )
+bool WAD::InsertAfter ( const wLumpName *name, ULONG newSize, void *newStuff, bool owner, const wadDirEntry *entry )
 {
     ULONG index = indexOf ( entry );
     if ( entry && ( index == ( ULONG ) -1 )) return false;
@@ -812,6 +814,7 @@ const wadListDirEntry *wadList::FindWAD ( const char *name, const wadListDirEntr
         last = indexOf ( end );
         if ( last == ( ULONG ) -1 ) return NULL;
     }
+
     const wadListDirEntry *dir = &directory [i];
     for ( ; i <= last; i++, dir++ ) {
         if ( dir->entry->name[0] != name[0] ) continue;
@@ -949,9 +952,10 @@ bool wadList::Extract ( const wLumpName *res, const char *wadName )
             level->AddToWAD ( newWad );
             delete level;
         } else {
-            dir = FindWAD ( res[i], NULL, NULL );
-            void *ptr = dir->wad->ReadEntry ( dir->entry, &size, false );
-            newWad->InsertAfter (( const wLumpName * ) res[i], size, ptr, true );
+            if (( dir = FindWAD ( res[i], NULL, NULL )) != NULL ) {
+                void *ptr = dir->wad->ReadEntry ( dir->entry, &size, false );
+                newWad->InsertAfter (( const wLumpName * ) res[i], size, ptr, true );
+            }
         }
     }
 
