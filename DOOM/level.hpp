@@ -6,7 +6,7 @@
 //
 // Description: Object classes for manipulating Doom Maps
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -186,6 +186,7 @@ class DoomLevel {
     const char *m_Music;
     int         m_Cluster;
 
+    int         m_MapDataSize;
     int         m_NoThings;
     int         m_NoLineDefs;
     int         m_NoSideDefs;
@@ -211,6 +212,7 @@ class DoomLevel {
     bool        m_RejectChanged;
     bool        m_BlockMapChanged;
 
+    char       *m_MapData;
     wThing     *m_Thing;
     wLineDef   *m_LineDef;
     wSideDef   *m_SideDef;

@@ -6,7 +6,7 @@
 //
 // Description: Error Logger object header
 //
-// Copyright (c) 1998-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1998-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -164,6 +164,7 @@ public:
     void flush ();
 
     dbgString &operator << ( char );
+    dbgString &operator << ( unsigned char );
     dbgString &operator << ( const char * );
     dbgString &operator << ( short );
     dbgString &operator << ( unsigned short );

@@ -65,6 +65,10 @@ extern ULONG startX, startY;
 
 void SaveConsoleSettings ();
 void RestoreConsoleSettings ();
+void HideCursor ();
+void ShowCursor ();
+int GetKey ();
+bool KeyPressed ();
 
 #if defined ( __OS2__ )
 
@@ -85,8 +89,6 @@ void RestoreConsoleSettings ();
 #define cprintf printf
 
 extern char *strupr ( char *ptr );
-extern int getch ();
-extern bool kbhit ();
 
 #endif
 
@@ -466,7 +468,7 @@ int main ( int argc, char *argv[] )
 
     int argIndex = 1, changes = 0;
 
-    while ( kbhit ()) getch ();
+    while ( KeyPressed ()) GetKey ();
     do {
 
         argIndex = parseArgs ( argIndex, argv );
@@ -495,7 +497,7 @@ int main ( int argc, char *argv[] )
         do {
 
             changes += ProcessLevel ( levelNames [noLevels++], myList1, myList2 );
-            if ( kbhit () && ( getch () == 0x1B )) break;
+            if ( KeyPressed () && ( GetKey () == 0x1B )) break;
 
         } while ( levelNames [noLevels][0] );
 

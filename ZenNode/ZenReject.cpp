@@ -6,7 +6,7 @@
 //
 // Description: This module contains the logic for the REJECT builder.
 //
-// Copyright (c) 1995-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1995-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by

@@ -6,7 +6,7 @@
 //
 // Description:
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@
 #define OFFSET_OF(t,x)	(( size_t ) & (( t * ) 0 )->( x ))
 #define SIZE(x)		( sizeof ( x ) / sizeof (( x )[0] ))
 #define EVER		;;
-	    
+
 typedef unsigned char  UCHAR;
 typedef unsigned short USHORT;
 typedef unsigned long  ULONG;
@@ -60,9 +60,27 @@ typedef unsigned long  ULONG;
 
 #endif
 
-// In case endian.h hasn't defined one of these, define one
+#if defined ( __BYTE_ORDER )
+
+    // Undo any previos definitions
+    #undef LITTLE_ENDIAN
+    #undef BIG_ENDIAN
+
+    #if __BYTE_ORDER == __LITTLE_ENDIAN
+        #define LITTLE_ENDIAN
+    #endif
+    #if __BYTE_ORDER == __BIG_ENDIAN
+        #define BIG_ENDIAN
+    #endif
+
+#endif
+
 #if ! defined ( LITTLE_ENDIAN ) && ! defined ( BIG_ENDIAN )
     #define LITTLE_ENDIAN
+#endif
+
+#if defined ( LITTLE_ENDIAN ) && defined ( BIG_ENDIAN )
+    #undef BIG_ENDIAN
 #endif
 
 typedef int (*QSORT_FUNC) ( const void *, const void * );
@@ -74,14 +92,12 @@ typedef int (*QSORT_FUNC) ( const void *, const void * );
     #undef min
 #endif
 
-#if (( __BORLANDC__ > 0x0410 ) || defined ( _MSC_VER ) || defined ( __GNUC__ ))
-    template < class T > inline void Swap ( T &item1, T &item2 )
-    {
-        T temp = item1;
-        item1 = item2;
-        item2 = temp;
-    }
-#endif
+template < class T > inline void Swap ( T &item1, T &item2 )
+{
+    T temp = item1;
+    item1 = item2;
+    item2 = temp;
+}
 
 //----------------------------------------------------------------------------
 // Compiler specific definitions

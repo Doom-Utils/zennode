@@ -6,7 +6,7 @@
 //
 // Description: This module contains the logic for the NODES builder.
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -46,6 +46,14 @@
 //   02-26-01   Removed vertSplitAlias - switched to 64-bit ints to solve overflow problem
 //   03-05-01   Fixed _WhichSide & DivideSeg so that things finally(?) work!
 //   03-05-01   Switched to 64-bit ints to solve overflow problem
+//   04-13-02   Changed vertex & ssector allocation to reallocate the free pool
+//   04-14-02   Fixed _WhichSide so that things finally(?) work! :-)
+//   04-16-02   Added more consistancy checks in DEBUG mode
+//   04-20-02   Switched to floating point math
+//   04-24-02   Fixed bug in _WhichSide for zero-length SEGs
+//   05-02-02   Simplified CreateNode & eliminated NODES structure
+//   05-04-02   Simplified use of aliases and flipping in WhichSide 
+//   05-05-02   Fixed double-int conversions to round correctly
 //
 //----------------------------------------------------------------------------
 
@@ -65,41 +73,36 @@ DBG_REGISTER ( __FILE__ );
 
 #define ANGLE_MASK              0x7FFF
 
-#define SQRT_2                  1.4142135623730950488016887242097
+#define EPSILON                 0.0001
 
 // Emperical values derived from a test of numerous .WAD files
-#define FACTOR_VERTEX		2.0		//  1.662791 - ???
+#define FACTOR_VERTEX		1.0		//  1.662791 - ???
 #define FACTOR_SEGS		2.0		//  1.488095 - ???
-#define FACTOR_NODE		2.5		//  2.228665 - MAP01 - csweeper.wad
-#define FACTOR_SSECTOR		50.0		// 27.476190 - E2M8  - vengnce.wad
-#define FACTOR_SUBSECTORS	256             //
+#define FACTOR_NODE		0.6		//  0.590830 - MAP01 - csweeper.wad
 
 static int       maxSegs;
 static int       maxVertices;
-static int       maxNodes;
 
 static int       nodesLeft;
-static NODE     *nodePool;
-static NODE     *nodeStart = NULL;
+static wNode    *nodePool;
 static int       nodeCount;			// Number of NODES stored
 
 static SEG      *tempSeg;
-static SEG      *segStart = NULL;
+static SEG      *segStart;
 static int       segCount;			// Number of SEGS stored
 
 static int       ssectorsLeft;
 static wSSector *ssectorPool;
 static int       ssectorCount;			// Number of SSECTORS stored
 
-static wVertex  *newVertices = NULL;
+static wVertex  *newVertices;
 static int       noVertices;
 
 //
 // Variables used by WhichSide to speed up side calculations
 //
 static char     *currentSide;
-static int       currentFlipped;
-static sAlias   *currentAlias;
+static int       currentAlias;
 
 static int      *convexList;
 static int      *convexPtr;
@@ -109,12 +112,13 @@ static int       showProgress;
 static UCHAR    *usedSector;
 static bool     *keepUnique;
 static bool      uniqueSubsectors;
-static bool     *lineUsed;
-static bool     *lineChecked;
+static char     *lineUsed;
+static char     *lineChecked;
 static int       noAliases;
-static sAlias   *lineDefAlias;
+static int      *lineDefAlias;
 static char    **sideInfo;
-static long      DY, DX, X, Y, H, ANGLE;
+static double    DY, DX, X, Y;
+static long      ANGLE;
 
 static sScoreInfo *score;
 
@@ -134,9 +138,9 @@ static SEG *(*PartitionFunction) ( SEG *, int );
 //----------------------------------------------------------------------------
 //  Create a list of SEGs from the *important* sidedefs.  A sidedef is
 //    considered important if:
-//     It has non-zero length
-//     It's linedef has different sectors on each side
-//     It has at least one visible texture
+//     - It has non-zero length
+//     - It's linedef has different sectors on each side
+//     - It has at least one visible texture
 //----------------------------------------------------------------------------
 
 static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
@@ -147,8 +151,8 @@ static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
     segCount = maxSegs = 0;
     const wLineDef *lineDef = level->GetLineDefs ();
     const wSideDef *sideDef = level->GetSideDefs ();
-    int i;
-    for ( i = 0; i < level->LineDefCount (); i++ ) {
+
+    for ( int i = 0; i < level->LineDefCount (); i++ ) {
         if ( lineDef [i].sideDef [0] != NO_SIDEDEF ) maxSegs++;
         if ( lineDef [i].sideDef [1] != NO_SIDEDEF ) maxSegs++;
     }
@@ -158,7 +162,7 @@ static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
     memset ( segStart, 0, sizeof ( SEG ) * maxSegs );
 
     SEG *seg = segStart;
-    for ( i = 0; i < level->LineDefCount (); i++, lineDef++ ) {
+    for ( int i = 0; i < level->LineDefCount (); i++, lineDef++ ) {
 
         wVertex *vertS = &newVertices [ lineDef->start ];
         wVertex *vertE = &newVertices [ lineDef->end ];
@@ -199,6 +203,10 @@ static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
             seg->LineDef      = lineDef;
             seg->Sector       = sideRight->sector;
             seg->DontSplit    = split;
+            seg->start.x      = vertS->x;
+            seg->start.y      = vertS->y;
+            seg->end.x        = vertE->x;
+            seg->end.y        = vertE->y;
             seg++;
         }
 
@@ -211,9 +219,14 @@ static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
             seg->LineDef      = lineDef;
             seg->Sector       = sideLeft->sector;
             seg->DontSplit    = split;
+            seg->start.x      = vertE->x;
+            seg->start.y      = vertE->y;
+            seg->end.x        = vertS->x;
+            seg->end.y        = vertS->y;
             seg++;
         }
     }
+
     segCount = seg - segStart;
 
     return segStart;
@@ -228,21 +241,30 @@ static void ComputeStaticVariables ( SEG *pSeg )
 {
     FUNCTION_ENTRY ( NULL, "ComputeStaticVariables", true );
 
-    currentAlias   = &lineDefAlias [ pSeg->Data.lineDef ];
-    currentSide    = sideInfo ? sideInfo [ currentAlias->index ] : NULL;
-    currentFlipped = ( pSeg->Data.flip ^ currentAlias->flip ) ? SIDE_FLIPPED : SIDE_NORMAL;
+    if ( pSeg->final == false ) {
 
-    const wLineDef *lineDef = pSeg->LineDef;
-    wVertex *vertS = &newVertices [ pSeg->Data.flip ? lineDef->end : lineDef->start ];
-    wVertex *vertE = &newVertices [ pSeg->Data.flip ? lineDef->start : lineDef->end ];
+        currentAlias   = lineDefAlias [ pSeg->Data.lineDef ];
+        currentSide    = sideInfo ? sideInfo [ currentAlias ] : NULL;
+
+        wVertex *vertS = &newVertices [ pSeg->AliasFlip ? pSeg->Data.end : pSeg->Data.start ];
+        wVertex *vertE = &newVertices [ pSeg->AliasFlip ? pSeg->Data.start : pSeg->Data.end ];
+        X     = vertS->x;
+        Y     = vertS->y;
+        DX    = vertE->x - vertS->x;
+        DY    = vertE->y - vertS->y;
+
+    } else {
+
+        currentAlias = 0;
+
+        X     = pSeg->start.x;
+        Y     = pSeg->start.y;
+        DX    = pSeg->end.x - pSeg->start.x;
+        DY    = pSeg->end.y - pSeg->start.y;
+
+    }
 
     ANGLE = pSeg->Data.angle;
-    X     = vertS->x;
-    Y     = vertS->y;
-    DX    = vertE->x - vertS->x;
-    DY    = vertE->y - vertS->y;
-    // The sqaure root of 2 is to account for a square pixel at 45ø
-    H     = ( long ) ( SQRT_2 * hypot ( DX, DY )) + 1;
 }
 
 //----------------------------------------------------------------------------
@@ -258,18 +280,17 @@ static bool CoLinear ( SEG *seg )
     if (( ANGLE & ANGLE_MASK ) != ( seg->Data.angle & ANGLE_MASK )) return false;
 
     // Do the math stuff
-    wVertex *vertS = &newVertices [ seg->Data.start ];
-    if ( DX == 0 ) return ( vertS->x == X ) ? true : false;
-    if ( DY == 0 ) return ( vertS->y == Y ) ? true : false;
+    if ( DX == 0.0 ) return ( seg->start.x == X ) ? true : false;
+    if ( DY == 0.0 ) return ( seg->start.y == Y ) ? true : false;
 
     // Rotate vertS about (X,Y) by é degrees to get y offset
     //   Y = Hùsin(é)           ³  1  0  0 ³³ cos(é)  -sin(é)  0 ³
     //   X = Hùcos(é)    ³x y 1³³  0  1  0 ³³ sin(é)   cos(é)  0 ³
     //   H = (Xý+Yý)^«         ³ -X -Y  1 ³³   0         0    1 ³
 
-    int y = DX * ( vertS->y - Y ) - DY * ( vertS->x - X );
+    double y = DX * ( seg->start.y - Y ) - DY * ( seg->start.x - X );
 
-    return ( y == 0 ) ? true : false;
+    return ( y == 0.0 ) ? true : false;
 }
 
 //----------------------------------------------------------------------------
@@ -280,24 +301,25 @@ static void FindBounds ( wBound *bound, SEG *seg, int noSegs )
 {
     FUNCTION_ENTRY ( NULL, "FindBounds", true );
 
-    wVertex *vert = &newVertices [ seg->Data.start ];
-    bound->minx = bound->maxx = vert->x;
-    bound->miny = bound->maxy = vert->y;
-    for ( int i = 0; i < noSegs; i++ ) {
-        wVertex *vertS = &newVertices [ seg->Data.start ];
-        wVertex *vertE = &newVertices [ seg->Data.end ];
+    bound->minx = bound->maxx = ( SHORT ) seg->start.x;
+    bound->miny = bound->maxy = ( SHORT ) seg->start.y;
 
-        int loX = vertS->x, hiX = vertS->x;
-        if ( loX < vertE->x ) hiX = vertE->x; else loX = vertE->x;
-        int loY = vertS->y, hiY = vertS->y;
-        if ( loY < vertE->y ) hiY = vertE->y; else loY = vertE->y;
+    for ( int i = 0; i < noSegs; i++ ) {
+
+        int startX = lrint ( seg [i].start.x );
+        int endX   = lrint ( seg [i].end.x );
+        int startY = lrint ( seg [i].start.y );
+        int endY   = lrint ( seg [i].end.y );
+
+        int loX = startX, hiX = startX;
+        if ( loX < endX ) hiX = endX; else loX = endX;
+        int loY = startY, hiY = startY;
+        if ( loY < endY ) hiY = endY; else loY = endY;
 
         if ( loX < bound->minx ) bound->minx = ( SHORT ) loX;
         if ( hiX > bound->maxx ) bound->maxx = ( SHORT ) hiX;
         if ( loY < bound->miny ) bound->miny = ( SHORT ) loY;
         if ( hiY > bound->maxy ) bound->maxy = ( SHORT ) hiY;
-
-        seg++;
     }
 }
 
@@ -308,82 +330,61 @@ static void FindBounds ( wBound *bound, SEG *seg, int noSegs )
 //    _WhichSide.
 //
 //    Returns:
-//       -1 - SEG is on the left of the partition
-//        0 - SEG is split by the partition
-//       +1 - SEG is on the right of the partition
+//       -1 - SEG is on the left of the partition
+//        0 - SEG is split by the partition
+//       +1 - SEG is on the right of the partition
 //----------------------------------------------------------------------------
 
-int _WhichSide ( SEG *seg )
+static int _WhichSide ( SEG *seg )
 {
     FUNCTION_ENTRY ( NULL, "_WhichSide", true );
 
-    wVertex *vertS = &newVertices [ seg->Data.start ];
-    wVertex *vertE = &newVertices [ seg->Data.end ];
-    int y1, y2;
+    sVertex *vertS = &seg->start;
+    sVertex *vertE = &seg->end;
+    double y1, y2;
 
-    if ( DX == 0 ) {
-        if ( DY > 0 ) {
+    if ( DX == 0.0 ) {
+        if ( DY > 0.0 ) {
             y1 = ( X - vertS->x ),    y2 = ( X - vertE->x );
         } else {
             y1 = ( vertS->x - X ),    y2 = ( vertE->x - X );
         }
-    } else if ( DY == 0 ) {
-        if ( DX > 0 ) {
+    } else if ( DY == 0.0 ) {
+        if ( DX > 0.0 ) {
             y1 = ( vertS->y - Y ),    y2 = ( vertE->y - Y );
         } else {
             y1 = ( Y - vertS->y ),    y2 = ( Y - vertE->y );
         }
     } else {
-
         y1 = DX * ( vertS->y - Y ) - DY * ( vertS->x - X );
         y2 = DX * ( vertE->y - Y ) - DY * ( vertE->x - X );
 
-        // If we're close to the partition line, compare with the point of intersection
-        if ((( y1 < H ) && ( y1 > -H )) || (( y2 < H ) && ( y2 > -H ))) {
-
+        if ( seg->final == true ) {
             const wLineDef *lineDef = seg->LineDef;
             wVertex *vertS = &newVertices [ lineDef->start ];
             wVertex *vertE = &newVertices [ lineDef->end ];
 
-            int dx = vertE->x - vertS->x;
-            int dy = vertE->y - vertS->y;
-            int det = dx * DY - dy * DX;
-
-            if ( det != 0 ) {
-
-                int num = ( vertS->y - Y ) * DX - ( vertS->x - X ) * DY;
-
-                // Find the point of intersection
-                int x = ( int ) ( vertS->x + ( LLONG ) num * dx / det );
-                int y = ( int ) ( vertS->y + ( LLONG ) num * dy / det );
-
-                int y3 = DX * ( y - Y ) - DY * ( x - X );
-
-                // If either the start or end point is the intersecting point - pin it to 0
-                // NOTE: We really should compare the translated/rotated Xs as well
-                if ( y1 == y3 ) y1 = 0;
-                if ( y2 == y3 ) y2 = 0;
-
+            double dx = vertE->x - vertS->x;
+            double dy = vertE->y - vertS->y;
+            double det = dx * DY - dy * DX;
+            if ( det != 0.0 ) {
+                double num = DX * ( vertS->y - Y ) - DY * ( vertS->x - X );
+                double x = lrint ( vertS->x + num * dx / det );
+                double y = lrint ( vertS->y + num * dy / det );
+                if (( seg->start.x == x ) && ( seg->start.y == y )) y1 = 0.0;
+                if (( seg->end.x == x ) && ( seg->end.y == y )) y2 = 0.0;
             }
         }
     }
 
+    if ( fabs ( y1 ) < EPSILON ) y1 = 0.0;
+    if ( fabs ( y2 ) < EPSILON ) y2 = 0.0;
+
     // If its co-linear, decide based on direction
-    if (( y1 == 0 ) && ( y2 == 0 )) {
-        int x1 = DX * ( vertS->x - X ) + DY * ( vertS->y - Y );
-        int x2 = DX * ( vertE->x - X ) + DY * ( vertE->y - Y );
-        if (( seg->Data.angle & 0x7F00 ) == ( ANGLE & 0x7F00 )) {
-            // We need to update the alias for this lineDef
-            sAlias *alias = &lineDefAlias [ seg->Data.lineDef ];
-            alias->index = currentAlias->index;
-            alias->flip  = currentAlias->flip;
-            if ( x1 < x2 ) {
-                if ( seg->Data.flip ) alias->flip ^= SIDE_FLIPPED;
-            } else {
-                if ( ! seg->Data.flip ) alias->flip ^= SIDE_FLIPPED;
-            }
-        }
-        return ( x1 < x2 ) ? SIDE_RIGHT : SIDE_LEFT;
+    if (( y1 == 0.0 ) && ( y2 == 0.0 )) {
+        double x1 = DX * ( vertS->x - X ) + DY * ( vertS->y - Y );
+        double x2 = DX * ( vertE->x - X ) + DY * ( vertE->y - Y );
+        return ( x1 <= x2 ) ? SIDE_RIGHT : SIDE_LEFT;
     }
 
     // Otherwise:
@@ -391,36 +392,59 @@ int _WhichSide ( SEG *seg )
     //   Both    0 : (( y1 < 0 ) && ( y2 > 0 )) || (( y1 > 0 ) && ( y2 < 0 ))
     //   Right   1 : ( y1 <= 0 ) && ( y2 <= 0 )
 
-    return ( y1 <  0 ) ? (( y2 <= 0 ) ? SIDE_RIGHT : SIDE_SPLIT ) :
-           ( y1 == 0 ) ? (( y2 <= 0 ) ? SIDE_RIGHT : SIDE_LEFT  ) :
-                         (( y2 >= 0 ) ? SIDE_LEFT  : SIDE_SPLIT );
+    return ( y1 <  0.0 ) ? (( y2 <= 0.0 ) ? SIDE_RIGHT : SIDE_SPLIT ) :
+           ( y1 == 0.0 ) ? (( y2 <= 0.0 ) ? SIDE_RIGHT : SIDE_LEFT  ) :
+                           (( y2 >= 0.0 ) ? SIDE_LEFT  : SIDE_SPLIT );
 }
 
-inline int WhichSide ( SEG *seg )
+static inline int WhichSide ( SEG *seg )
 {
     FUNCTION_ENTRY ( NULL, "WhichSide", true );
 
-    sAlias *alias = &lineDefAlias [ seg->Data.lineDef ];
-    if ( alias->index == currentAlias->index ) {
-        int isFlipped = ( seg->Data.flip ^ alias->flip ) ? SIDE_FLIPPED : SIDE_NORMAL;
-        return ( currentFlipped == isFlipped ) ? SIDE_RIGHT : SIDE_LEFT;
+    // Treat split partition/seg differently
+    if (( seg->Split == true ) || ( currentAlias == 0 )) {
+        return _WhichSide ( seg );
     }
 
+    // See if partition & seg lie on the same line
+    int alias = lineDefAlias [ seg->Data.lineDef ];
+    if ( alias == currentAlias ) {
+        return seg->AliasFlip ^ SIDE_RIGHT;
+    }
+
+    // See if we've already categorized the LINEDEF for this SEG
     int side = currentSide [ seg->Data.lineDef ];
-    if ( IS_LEFT_RIGHT ( side )) return FLIP ( currentFlipped, side );
+    if ( IS_LEFT_RIGHT ( side )) return side;
 
     side = _WhichSide ( seg );
 
-    if (( seg->Split == false ) && ( currentSide [ seg->Data.lineDef ] == SIDE_UNKNOWN )) {
-        currentSide [ seg->Data.lineDef ] = ( char ) FLIP ( currentFlipped, side );
+    if ( seg->Split == false ) {
+        currentSide [ seg->Data.lineDef ] = ( char ) side;
     }
 
     return side;
 }
+
+#if defined ( DEBUG )
+
+    static int dbgWhichSide ( SEG *seg )
+    {
+        FUNCTION_ENTRY ( NULL, "dbgWhichSide", true );
+
+        int side = WhichSide ( seg );
+        if ( side != _WhichSide ( seg )) {
+            ERROR ( "WhichSide is wigging out!" );
+        }
+        return side;
+    }
+
+#define WhichSide dbgWhichSide
+
+#endif
 
 //----------------------------------------------------------------------------
 //  Create a list of aliases vs LINEDEFs that indicates which side of a given
-//    alias a line is on.
+//    alias a LINEDEF is on.
 //----------------------------------------------------------------------------
 
 static void CreateSideInfo ( DoomLevel *level )
@@ -443,21 +467,65 @@ static void CreateSideInfo ( DoomLevel *level )
 }
 
 //----------------------------------------------------------------------------
+//  Return an index for a vertex at (x,y).  If an existing vertex exists,
+//    return it, otherwise, create a new one if room is left.
+//----------------------------------------------------------------------------
+
+static int AddVertex ( int x, int y )
+{
+    FUNCTION_ENTRY ( NULL, "AddVertex", true );
+
+    for ( int i = 0; i < noVertices; i++ ) {
+        if (( newVertices [i].x == x ) && ( newVertices [i].y == y )) return i;
+    }
+
+    if ( noVertices == maxVertices ) {
+        maxVertices = ( 110 * maxVertices ) / 100;
+        newVertices = ( wVertex * ) realloc ( newVertices, sizeof ( wVertex ) * maxVertices );
+    }
+
+    newVertices [ noVertices ].x = ( USHORT ) x;
+    newVertices [ noVertices ].y = ( USHORT ) y;
+
+    return noVertices++;
+}
+
+//----------------------------------------------------------------------------
 //  Create a SSECTOR and record the index of the 1st SEG and the total number
 //  of SEGs.
 //----------------------------------------------------------------------------
 
-static USHORT CreateSSector ( int noSegs, SEG *segs )
+static USHORT CreateSSector ( SEG *segs, int noSegs )
 {
     FUNCTION_ENTRY ( NULL, "CreateSSector", true );
 
     if ( ssectorsLeft-- == 0 ) {
-        fprintf ( stderr, "ERROR: ssectorPool exhausted\n" );
-        exit ( -1 );
+        int delta     = ( 10 * ssectorCount ) / 100;
+        ssectorPool   = ( wSSector * ) realloc ( ssectorPool, sizeof ( wSSector ) * ( ssectorCount + delta ));
+        ssectorsLeft += delta;
     }
-    wSSector *ssec = ssectorPool++;
-    ssec->num = ( USHORT ) noSegs;
-    ssec->first = ( USHORT ) ( segs - segStart );
+
+    int count = noSegs;
+    int first = segs - segStart;
+
+    // Eliminate zero length SEGs and assign vertices
+    for ( int i = 0; i < noSegs; i++ ) {
+        if (( segs->start.x == segs->end.x ) && ( segs->start.y == segs->end.y )) {
+            memcpy ( segs, segs + 1, sizeof ( SEG ) * ( noSegs - i - 1 ));
+            count--;
+        } else {
+            segs->Data.start = ( USHORT ) AddVertex ( lrint ( segs->start.x ), lrint ( segs->start.y ));
+            segs->Data.end   = ( USHORT ) AddVertex ( lrint ( segs->end.x ),   lrint ( segs->end.y ));
+            segs++;
+        }
+    }
+    if ( count == 0 ) {
+        WARNING ( "No valid SEGS left in list!" );
+    }
+
+    wSSector *ssec = &ssectorPool [ssectorCount];
+    ssec->num = ( USHORT ) count;
+    ssec->first = ( USHORT ) first;
 
     return ( USHORT ) ssectorCount++;
 }
@@ -466,7 +534,7 @@ static int SortByAngle ( const void *ptr1, const void *ptr2 )
 {
     FUNCTION_ENTRY ( NULL, "SortByAngle", true );
 
-    int dif = ( 0x7FFF & (( SEG * ) ptr1)->Data.angle ) - ( 0x7FFF & (( SEG * ) ptr2)->Data.angle );
+    int dif = ( ANGLE_MASK & (( SEG * ) ptr1)->Data.angle ) - ( ANGLE_MASK & (( SEG * ) ptr2)->Data.angle );
     if ( dif ) return dif;
     dif = (( SEG * ) ptr1)->Data.lineDef - (( SEG * ) ptr2)->Data.lineDef;
     if ( dif ) return dif;
@@ -493,77 +561,62 @@ static int SortByLineDef ( const void *ptr1, const void *ptr2 )
 //    significantly fewer aliases than linedefs.
 //----------------------------------------------------------------------------
 
-void GetLineDefAliases ( DoomLevel *level )
+static int GetLineDefAliases ( DoomLevel *level, SEG *segs, int noSegs )
 {
     FUNCTION_ENTRY ( NULL, "GetLineDefAliases", true );
 
-    noAliases = 0;
-    lineDefAlias = new sAlias [ level->LineDefCount () + 1 ];
-    memset ( lineDefAlias, -1, sizeof ( sAlias ) * ( level->LineDefCount () + 1 ));
+    int noAliases = 1;
+
+    lineDefAlias = new int [ level->LineDefCount () ];
+    memset ( lineDefAlias, -1, sizeof ( int ) * ( level->LineDefCount ()));
+
     SEG **segAlias = new SEG * [ level->LineDefCount () ];
 
-    qsort ( segStart, segCount, sizeof ( SEG ), SortByAngle );
+    qsort ( segs, noSegs, sizeof ( SEG ), SortByAngle );
 
-    int lowIndex  = 0;
+    int lowIndex  = 1;
     int lastAngle = -1;
 
-    for ( int i = 0; i < segCount; i++ ) {
+    for ( int i = 0; i < noSegs; i++ ) {
 
         // If the LINEDEF has been covered, skip this SEG
-        sAlias *alias = &lineDefAlias [ segStart [i].Data.lineDef ];
-        if ( alias->index != -1 ) continue;
+        int *alias = &lineDefAlias [ segs [i].Data.lineDef ];
 
-        ComputeStaticVariables ( &segStart [i] );
+        if ( *alias == -1 ) {
 
-        // Compare against existing aliases with the same angle
-        int x = lowIndex;
-        while ( x < noAliases ) {
-            if ( CoLinear ( segAlias [x] )) break;
-            x++;
-        }
+            ComputeStaticVariables ( &segs [i] );
 
-        if ( x >= noAliases ) {
-            segAlias [ x = noAliases++ ] = &segStart [i];
-            if ( lastAngle != ( ANGLE & ANGLE_MASK )) {
-                lowIndex = x;
-                lastAngle = ANGLE & ANGLE_MASK;
+            // Compare against existing aliases with the same angle
+            int x = lowIndex;
+            while ( x < noAliases ) {
+                if ( CoLinear ( segAlias [x] )) break;
+                x++;
             }
+
+            if ( x >= noAliases ) {
+                segAlias [ x = noAliases++ ] = &segs [i];
+                if ( lastAngle != ( ANGLE & ANGLE_MASK )) {
+                    lowIndex = x;
+                    lastAngle = ANGLE & ANGLE_MASK;
+                }
+            }
+
+            *alias = x;
         }
 
-        alias->index = x;
-        alias->flip  = ( segAlias [x]->Data.angle == ANGLE ) ? false : true;
+        segs [i].AliasFlip = ( segs [i].Data.angle == segAlias [*alias]->Data.angle ) ? 0 : SIDE_FLIPPED;
     }
 
-    qsort ( segStart, segCount, sizeof ( SEG ), SortByLineDef );
+    delete [] segAlias;
+
+    qsort ( segs, noSegs, sizeof ( SEG ), SortByLineDef );
+
+    return noAliases;
 }
 
 //----------------------------------------------------------------------------
-//  Return an index for a vertex at (x,y).  If an existing vertex exists,
-//    return it, otherwise, create a new one if room is left.
-//----------------------------------------------------------------------------
-
-static int AddVertex ( int x, int y )
-{
-    FUNCTION_ENTRY ( NULL, "AddVertex", true );
-
-    for ( int i = 0; i < noVertices; i++ ) {
-        if (( newVertices [i].x == x ) && ( newVertices [i].y == y )) return i;
-    }
-
-    if ( noVertices >= maxVertices ) {
-        fprintf ( stderr, "\nError: maximum number of vertices exceeded.\n" );
-        exit ( -1 );
-    }
-
-    newVertices [ noVertices ].x = ( USHORT ) x;
-    newVertices [ noVertices ].y = ( USHORT ) y;
-
-    return noVertices++;
-}
-
-//----------------------------------------------------------------------------
-//  If the given SEGs form a proper NODE but don't all belong to the same
-//    sector, artificially break up the NODE by sector.  SEGs are arranged
+//  If the given SEGs form a proper node but don't all belong to the same
+//    sector, artificially break up the node by sector.  SEGs are arranged
 //    so that SEGs belonging to sectors that should be kept unique are listed
 //    first, followed by those that are not - and sorted by linedef for each
 //    category.
@@ -599,21 +652,23 @@ static void SortSectors ( SEG *seg, int noSegs, int *noLeft, int *noRight )
 }
 
 #if defined ( DEBUG )
-static void DumpSegs ( SEG *seg, int noSegs )
-{
-    FUNCTION_ENTRY ( NULL, "DumpSegs", true );
 
-    for ( int i = 0; i < noSegs; i++ ) {
-        wVertex *vertS = &newVertices [ seg->Data.start ];
-        wVertex *vertE = &newVertices [ seg->Data.end ];
-        int alias = lineDefAlias [ seg->Data.lineDef ].index;
-        WARNING (( lineUsed [ alias ] ? '*' : ' ' ) <<
-                  " lineDef: " << seg->Data.lineDef <<
-                  " (" << vertS->x << "," << vertS->y << ") -" <<
-                  " (" << vertE->x << "," << vertE->y << ")" );
-        seg++;
+    static void DumpSegs ( SEG *seg, int noSegs )
+    {
+        FUNCTION_ENTRY ( NULL, "DumpSegs", true );
+
+        for ( int i = 0; i < noSegs; i++ ) {
+            sVertex *vertS = &seg->start;
+            sVertex *vertE = &seg->end;
+            int alias = lineDefAlias [ seg->Data.lineDef ];
+            WARNING (( lineUsed [ alias ] ? "*" : " " ) <<
+                      " lineDef: " << seg->Data.lineDef <<
+                      " (" << vertS->x << "," << vertS->y << ") -" <<
+                      " (" << vertE->x << "," << vertE->y << ")" );
+            seg++;
+        }
     }
-}
+
 #endif
 
 static void SortSegs ( SEG *pSeg, SEG *seg, int noSegs, int *noLeft, int *noRight, int *noSplits )
@@ -624,17 +679,21 @@ static void SortSegs ( SEG *pSeg, SEG *seg, int noSegs, int *noLeft, int *noRigh
 
     if ( pSeg == NULL ) {
 #if defined ( DEBUG )
-        // Make sure that all SEGs are actually on the right side of each other
-        ComputeStaticVariables ( seg );
+        for ( int x = 0; x < noSegs; x++ ) {
+            // Make sure that all SEGs are actually on the right side of each other
+            ComputeStaticVariables ( &seg [x] );
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) continue;
 
-        count [0] = count [1] = count [2] = 0;
-        for ( int i = 0; i < noSegs; i++ ) {
-            count [( seg [i].Side = WhichSide ( &seg [i] )) + 1 ]++;
-        }
+            count [0] = count [1] = count [2] = 0;
+            for ( int i = 0; i < noSegs; i++ ) {
+                count [( seg [i].Side = _WhichSide ( &seg [i] )) + 1 ]++;
+            }
 
-        if ( count [0] || count [1] ) {
-            DumpSegs ( seg, noSegs );
-            ERROR ( "Something weird is going on! (" << count [0] << "|" << count [1] << "|" << count [2] << ") " << noSegs );
+            if (( count [0] * count [2] ) || count [1] ) {
+                DumpSegs ( seg, noSegs );
+                ERROR ( "Something weird is going on! (" << count [0] << "|" << count [1] << "|" << count [2] << ") " << noSegs );
+                break;
+            }
         }
 #endif
         *noRight  = noSegs;
@@ -651,9 +710,9 @@ static void SortSegs ( SEG *pSeg, SEG *seg, int noSegs, int *noLeft, int *noRigh
         count [( seg [i].Side = WhichSide ( &seg [i] )) + 1 ]++;
     }
 
-    *noLeft = count [0], *noSplits = count [1], *noRight = count [2];
+    ASSERT (( count [0] * count [2] != 0 ) || ( count [1] != 0 ));
 
-    ASSERT (( *noLeft != 0 ) || ( *noSplits != 0 ));
+    *noLeft = count [0], *noSplits = count [1], *noRight = count [2];
 
     SEG *rSeg = seg;
     for ( i = 0; seg [i].Side == SIDE_RIGHT; i++ ) rSeg++;
@@ -670,6 +729,7 @@ static void SortSegs ( SEG *pSeg, SEG *seg, int noSegs, int *noLeft, int *noRigh
         }
         memcpy ( rSeg, tempSeg, ( noSegs - count [2] ) * sizeof ( SEG ));
     }
+
     return;
 }
 
@@ -684,11 +744,47 @@ static bool ChoosePartition ( SEG *seg, int noSegs, int *noLeft, int *noRight, i
 {
     FUNCTION_ENTRY ( NULL, "ChoosePartition", true );
 
-    memcpy ( lineChecked, lineUsed, sizeof ( bool ) * noAliases );
+    bool check = true;
+
+retry:
+
+    if ( seg->final == false ) {
+        memcpy ( lineChecked, lineUsed, sizeof ( char ) * noAliases );
+    } else {
+        memset ( lineChecked, 0, sizeof ( char ) * noAliases );
+    }
 
     SEG *pSeg = PartitionFunction ( seg, noSegs );
 
     SortSegs ( pSeg, seg, noSegs, noLeft, noRight, noSplits );
+
+    // Make sure the set of SEGs is still convex after we convert to integer coordinates
+    if (( pSeg == NULL ) && ( check == true )) {
+        check = false;
+        double error = 0.0;
+        for ( int i = 0; i < noSegs; i++ ) {
+
+            int startX = lrint ( seg [i].start.x );
+            int startY = lrint ( seg [i].start.y );
+            int endX   = lrint ( seg [i].end.x );
+            int endY   = lrint ( seg [i].end.y );
+                          
+            error += fabs ( seg [i].start.x - startX );
+            error += fabs ( seg [i].start.y - startY );
+            error += fabs ( seg [i].end.x - endX );
+            error += fabs ( seg [i].end.y - endY );
+
+            seg [i].start.x = startX;
+            seg [i].start.y = startY;
+            seg [i].end.x   = endX;
+            seg [i].end.y   = endY;
+            seg [i].final   = true;
+        }
+        if ( error > EPSILON ) {
+            // Force a check of each line
+            goto retry;
+        }
+    }
 
     return pSeg ? true : false;
 }
@@ -709,24 +805,25 @@ static SEG *Algorithm1 ( SEG *segs, int noSegs )
     int count [3];
     int &lCount = count [0], &sCount = count [1], &rCount = count [2];
     // Compute the maximum value maxMetric can possibly reach
-    long bestMetric = ( noSegs / 2 ) * ( noSegs - noSegs / 2 );
-    long maxMetric = 0x80000000, maxSplits = 0x7FFFFFFF;
+    long maxMetric = ( noSegs / 2 ) * ( noSegs - noSegs / 2 );
+    long bestMetric = 0x80000000, bestSplits = 0x7FFFFFFF;
 
     for ( int i = 0; i < noSegs; i++ ) {
         if ( showProgress && (( i & 15 ) == 0 )) ShowProgress ();
-        int alias = lineDefAlias [ testSeg->Data.lineDef ].index;
-        if ( ! lineChecked [ alias ]) {
-            lineChecked [ alias ] = true;
+        int alias = testSeg->Split ? 0 : lineDefAlias [ testSeg->Data.lineDef ];
+        if (( alias == 0 ) || ( lineChecked [ alias ] == false )) {
+            lineChecked [ alias ] = -1;
             count [0] = count [1] = count [2] = 0;
             ComputeStaticVariables ( testSeg );
-            if ( maxMetric < 0 ) for ( int j = 0; j < noSegs; j++ ) {
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) goto next;
+            if ( bestMetric < 0 ) for ( int j = 0; j < noSegs; j++ ) {
                 count [ WhichSide ( &segs [j] ) + 1 ]++;
             } else for ( int j = 0; j < noSegs; j++ ) {
                 count [ WhichSide ( &segs [j] ) + 1 ]++;
-                if ( sCount > maxSplits ) goto next;
+                if ( sCount > bestSplits ) goto next;
             }
             // Only consider SEG if it is not a boundary line
-            if ( lCount + sCount ) {
+            if ( lCount * rCount + sCount ) {
                 long metric = ( long ) lCount * ( long ) rCount;
                 if ( sCount ) {
                     long temp = X1 * sCount;
@@ -734,17 +831,45 @@ static SEG *Algorithm1 ( SEG *segs, int noSegs )
                     metric -= ( X3 * sCount + X4 ) * sCount;
                 }
                 if ( ANGLE & 0x3FFF ) metric--;
-                if ( metric == bestMetric ) return testSeg;
-                if ( metric > maxMetric ) {
+                if ( metric == maxMetric ) return testSeg;
+                if ( metric > bestMetric ) {
                     pSeg = testSeg;
-                    maxSplits = sCount + 2;
-                    maxMetric = metric;
+                    bestSplits = sCount + 2;
+                    bestMetric = metric;
                 }
-            } else {
+            } else if ( alias != 0 ) {
                 // Eliminate outer edges of the map from here & down
                 *convexPtr++ = alias;
             }
         }
+#if defined ( DEBUG )
+        else if ( lineChecked [alias] > 0 ) {
+            count [0] = count [1] = count [2] = 0;
+            ComputeStaticVariables ( testSeg );
+            int side = WhichSide ( testSeg );
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) continue;
+            for ( int j = 0; j < noSegs; j++ ) {
+                switch ( WhichSide ( &segs [j] )) {
+                    case SIDE_LEFT :
+                        if ( side == SIDE_RIGHT ) {
+                            WARNING ( "lineDef " << segs [j].Data.lineDef << " should not to the left of lineDef " << testSeg->Data.lineDef );
+                        }
+                        break;
+                    case SIDE_SPLIT :
+                        WARNING ( "lineDef " << segs [j].Data.lineDef << " should not be split by lineDef " << testSeg->Data.lineDef );
+                        break;
+                    case SIDE_RIGHT :
+                        if ( side == SIDE_LEFT ) {
+                            WARNING ( "lineDef " << segs [j].Data.lineDef << " should not to the right of lineDef " << testSeg->Data.lineDef );
+                        }
+                        break;
+                    default :
+                        break;
+                }
+            }
+        }
+#endif
+
 next:
         testSeg++;
     }
@@ -807,12 +932,12 @@ static SEG *Algorithm2 ( SEG *segs, int noSegs )
 
     for ( i = 0; i < noSegs; i++ ) {
         if ( showProgress && (( i & 15 ) == 0 )) ShowProgress ();
-        int alias = lineDefAlias [ testSeg->Data.lineDef ].index;
-        if ( ! lineChecked [ alias ]) {
-            lineChecked [ alias ] = true;
+        int alias = testSeg->Split ? 0 : lineDefAlias [ testSeg->Data.lineDef ];
+        if (( alias == 0 ) || ( lineChecked [ alias ] == false )) {
+            lineChecked [ alias ] = -1;
             count [0] = count [1] = count [2] = 0;
             ComputeStaticVariables ( testSeg );
-
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) goto next;
             sScoreInfo *curScore = &score [noScores];
             curScore->invalid = 0;
             memset ( usedSector, 0, sizeof ( UCHAR ) * sectorCount );
@@ -826,7 +951,7 @@ static SEG *Algorithm2 ( SEG *segs, int noSegs )
                 }
             }
             // Only consider SEG if it is not a boundary line
-            if ( lCount + sCount ) {
+            if ( lCount * rCount + sCount ) {
                 int lsCount = 0, rsCount = 0, ssCount = 0;
                 for ( int j = 0; j < sectorCount; j++ ) {
                     switch ( usedSector [j] ) {
@@ -852,11 +977,40 @@ static SEG *Algorithm2 ( SEG *segs, int noSegs )
                 }
 
                 noScores++;
-            } else {
+            } else if ( alias != 0 ) {
                 // Eliminate outer edges of the map
                 *convexPtr++ = alias;
             }
         }
+#if defined ( DEBUG )
+        else if ( lineChecked [alias] > 0 ) {
+            count [0] = count [1] = count [2] = 0;
+            ComputeStaticVariables ( testSeg );
+            int side = WhichSide ( testSeg );
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) continue;
+            for ( int j = 0; j < noSegs; j++ ) {
+                switch ( WhichSide ( &segs [j] )) {
+                    case SIDE_LEFT :
+                        if ( side == SIDE_RIGHT ) {
+                            WARNING ( "lineDef " << segs [j].Data.lineDef << " should not to the left of lineDef " << testSeg->Data.lineDef );
+                        }
+                        break;
+                    case SIDE_SPLIT :
+                        WARNING ( "lineDef " << segs [j].Data.lineDef << " should not be split by lineDef " << testSeg->Data.lineDef );
+                        break;
+                    case SIDE_RIGHT :
+                        if ( side == SIDE_LEFT ) {
+                            WARNING ( "lineDef " << segs [j].Data.lineDef << " should not to the right of lineDef " << testSeg->Data.lineDef );
+                        }
+                        break;
+                    default :
+                        break;
+                }
+            }
+        }
+#endif
+
+next:
         testSeg++;
     }
 
@@ -900,8 +1054,8 @@ static SEG *Algorithm3 ( SEG *segs, int noSegs )
     int count [3];
     int &lCount = count [0], &sCount = count [1], &rCount = count [2];
     // Compute the maximum value maxMetric can possibly reach
-    long bestMetric = ( long ) ( noSegs / 2 ) * ( long ) ( noSegs - noSegs / 2 );
-    long maxMetric = 0x80000000, maxSplits = 0x7FFFFFFF;
+    long maxMetric = ( long ) ( noSegs / 2 ) * ( long ) ( noSegs - noSegs / 2 );
+    long bestMetric = 0x80000000, bestSplits = 0x7FFFFFFF;
 
     int i = 0, max = ( noSegs < 30 ) ? noSegs : 30;
 
@@ -909,18 +1063,19 @@ retry:
 
     for ( ; i < max; i++ ) {
         if ( showProgress && (( i & 15 ) == 0 )) ShowProgress ();
-        int alias = lineDefAlias [ testSeg->Data.lineDef ].index;
-        if ( ! lineChecked [ alias ]) {
-            lineChecked [ alias ] = true;
+        int alias = testSeg->Split ? 0 : lineDefAlias [ testSeg->Data.lineDef ];
+        if (( alias == 0 ) || ( lineChecked [ alias ] == false )) {
+            lineChecked [ alias ] = -1;
             count [0] = count [1] = count [2] = 0;
             ComputeStaticVariables ( testSeg );
-            if ( maxMetric < 0 ) for ( int j = 0; j < noSegs; j++ ) {
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) goto next;
+            if ( bestMetric < 0 ) for ( int j = 0; j < noSegs; j++ ) {
                 count [ WhichSide ( &segs [j] ) + 1 ]++;
             } else for ( int j = 0; j < noSegs; j++ ) {
                 count [ WhichSide ( &segs [j] ) + 1 ]++;
-                if ( sCount > maxSplits ) goto next;
+                if ( sCount > bestSplits ) goto next;
             }
-            if ( lCount + sCount ) {
+            if ( lCount * rCount + sCount ) {
                 long metric = ( long ) lCount * ( long ) rCount;
                 if ( sCount ) {
                     long temp = X1 * sCount;
@@ -928,17 +1083,45 @@ retry:
                     metric -= ( X3 * sCount + X4 ) * sCount;
                 }
                 if ( ANGLE & 0x3FFF ) metric--;
-                if ( metric == bestMetric ) return testSeg;
-                if ( metric > maxMetric ) {
+                if ( metric == maxMetric ) return testSeg;
+                if ( metric > bestMetric ) {
                     pSeg = testSeg;
-                    maxSplits = sCount;
-                    maxMetric = metric;
+                    bestSplits = sCount;
+                    bestMetric = metric;
                 }
-            } else {
+            } else if ( alias != 0 ) {
                 // Eliminate outer edges of the map from here & down
                 *convexPtr++ = alias;
             }
         }
+#if defined ( DEBUG )
+        else if ( lineChecked [alias] > 0 ) {
+            count [0] = count [1] = count [2] = 0;
+            ComputeStaticVariables ( testSeg );
+            int side = WhichSide ( testSeg );
+            if (( fabs ( DX ) < EPSILON ) && ( fabs ( DY ) < EPSILON )) continue;
+            for ( int j = 0; j < noSegs; j++ ) {
+                switch ( WhichSide ( &segs [j] )) {
+                    case SIDE_LEFT :
+                        if ( side == SIDE_RIGHT ) {
+                            WARNING ( "lineDef " << segs [j].Data.lineDef << " should not to the left of lineDef " << testSeg->Data.lineDef );
+                        }
+                        break;
+                    case SIDE_SPLIT :
+                        WARNING ( "lineDef " << segs [j].Data.lineDef << " should not be split by lineDef " << testSeg->Data.lineDef );
+                        break;
+                    case SIDE_RIGHT :
+                        if ( side == SIDE_LEFT ) {
+                            WARNING ( "lineDef " << segs [j].Data.lineDef << " should not to the right of lineDef " << testSeg->Data.lineDef );
+                        }
+                        break;
+                    default :
+                        break;
+                }
+            }
+        }
+#endif
+
 next:
         testSeg++;
     }
@@ -974,28 +1157,35 @@ static void DivideSeg ( SEG *rSeg, SEG *lSeg )
     //   det     - 32 bits required
     //   x, y    - 50 bits required
 
-    int dx = vertE->x - vertS->x;
-    int dy = vertE->y - vertS->y;
-    int num = ( vertS->y - Y ) * DX - ( vertS->x - X ) * DY;
-    int det = dx * DY - dy * DX;
+    double dx  = vertE->x - vertS->x;
+    double dy  = vertE->y - vertS->y;
+    double num = DX * ( vertS->y - Y ) - DY * ( vertS->x - X );
+    double det = dx * DY - dy * DX;
 
-    int x = ( int ) ( vertS->x + ( LLONG ) num * dx / det );
-    int y = ( int ) ( vertS->y + ( LLONG ) num * dy / det );
-
-    int newIndex = AddVertex ( x, y );
-
-#if defined ( DEBUG )
-    if (( rSeg->Data.start == newIndex ) || ( rSeg->Data.end == newIndex )) {
-        wVertex *vertN = &newVertices [ newIndex ];
-        fprintf ( stderr, "\nNODES: End point duplicated in DivideSeg: LineDef #%d", rSeg->Data.lineDef );
-        fprintf ( stderr, "\n       Partition: from (%d,%d) to (%d,%d)", X, Y, X + DX, Y + DY );
-        fprintf ( stderr, "\n       LineDef: from (%d,%d) to (%d,%d) split at (%d,%d)", vertS->x, vertS->y, vertE->x, vertE->y, vertN->x, vertN->y );
+    if ( det == 0.0 ) {
+        ERROR ( "SEG is parallel to partition line" );
     }
+
+    double x = vertS->x + num * dx / det;
+    double y = vertS->y + num * dy / det;
+
+    if ( rSeg->final == true ) {
+        x = lrint ( x );
+        y = lrint ( y );
+#if defined ( DEBUG )
+        if ((( rSeg->start.x == x ) && ( rSeg->start.y == y )) ||
+            (( lSeg->start.x == x ) && ( lSeg->start.y == y ))) {
+            fprintf ( stderr, "\nNODES: End point duplicated in DivideSeg: LineDef #%d", rSeg->Data.lineDef );
+            fprintf ( stderr, "\n       Partition: from (%f,%f) to (%f,%f)", X, Y, X + DX, Y + DY );
+            fprintf ( stderr, "\n       LineDef: from (%d,%d) to (%d,%d) split at (%f,%f)", vertS->x, vertS->y, vertE->x, vertE->y, x, y );
+            fprintf ( stderr, "\n       SEG: from (%f,%f) to (%f,%f)", rSeg->start.x, rSeg->start.y, rSeg->end.x, rSeg->end.y );
+            fprintf ( stderr, "\n       dif: (%f,%f)  (%f,%f)", rSeg->start.x - x, rSeg->start.y - y, rSeg->end.x - x, rSeg->end.y - y );
+        }
 #endif
+    }
 
     // Determine which sided of the partition line the start point is on
-    wVertex *vert = &newVertices [ rSeg->Data.start ];
-    long sideS = ( long ) (( REAL ) ( DX * ( vert->y - Y )) - ( REAL ) ( DY * ( vert->x - X )));
+    double sideS = DX * ( rSeg->start.y - Y ) - DY * ( rSeg->start.x - X );
 
     // Get the correct endpoint of the base LINEDEF for the offset calculation
     if ( rSeg->Data.flip ) vertS = vertE;
@@ -1004,14 +1194,18 @@ static void DivideSeg ( SEG *rSeg, SEG *lSeg )
     lSeg->Split = true;
 
     // Fill in the parts of lSeg & rSeg that have changed
-    if ( sideS < 0 ) {
-        rSeg->Data.end    = ( USHORT ) newIndex;
-        lSeg->Data.start  = ( USHORT ) newIndex;
-        lSeg->Data.offset = ( USHORT ) hypot (( double ) ( x - vertS->x ), ( double ) ( y - vertS->y ));
+    if ( sideS < 0.0 ) {
+        rSeg->end.x       = x;
+        rSeg->end.y       = y;
+        lSeg->start.x     = x;
+        lSeg->start.y     = y;
+        lSeg->Data.offset = ( USHORT ) ( hypot (( double ) ( x - vertS->x ), ( double ) ( y - vertS->y )) + 0.5 );
     } else {
-        rSeg->Data.start  = ( USHORT ) newIndex;
-        lSeg->Data.end    = ( USHORT ) newIndex;
-        rSeg->Data.offset = ( USHORT ) hypot (( double ) ( x - vertS->x ), ( double ) ( y - vertS->y ));
+        lSeg->end.x       = x;
+        lSeg->end.y       = y;
+        rSeg->start.x     = x;
+        rSeg->start.y     = y;
+        rSeg->Data.offset = ( USHORT ) ( hypot (( double ) ( x - vertS->x ), ( double ) ( y - vertS->y )) + 0.5 );
     }
 
 #if defined ( DEBUG )
@@ -1050,30 +1244,29 @@ static void SplitSegs ( SEG *segs, int noSplits )
 
 //----------------------------------------------------------------------------
 //  Choose a SEG and partition the list of SEGs.  Verify that the partition
-//    selected is valid and calculate the necessary data for the NODE.  If
+//    selected is valid and calculate the necessary data for the node.  If
 //    no valid partition could be found, return NULL to indicate that the
 //    list of SEGs forms a valid SSECTOR.
 //----------------------------------------------------------------------------
 
-static bool PartitionNode ( NODE *node, SEG *rSegs, int noSegs, int *noLeft, int *noRight )
+static bool PartitionNode ( wNode *node, SEG *segs, int noSegs, int *noLeft, int *noRight )
 {
     FUNCTION_ENTRY ( NULL, "PartitionNode", true );
 
     int noSplits;
 
-    if ( ChoosePartition ( rSegs, noSegs, noLeft, noRight, &noSplits ) == false ) {
+    if ( ChoosePartition ( segs, noSegs, noLeft, noRight, &noSplits ) == false ) {
 
         if ( uniqueSubsectors ) {
             memset ( usedSector, false, sizeof ( UCHAR ) * sectorCount );
-            int i;
-            for ( i = 0; i < noSegs; i++ ) {
-                usedSector [ rSegs [i].Sector ] = true;
+            for ( int i = 0; i < noSegs; i++ ) {
+                usedSector [ segs [i].Sector ] = true;
             }
             int noSectors = 0;
-            for ( i = 0; i < sectorCount; i++ ) {
+            for ( int i = 0; i < sectorCount; i++ ) {
                 if ( usedSector [i] ) noSectors++;
             }
-            if ( noSectors > 1 ) for ( i = 0; noSectors && ( i < sectorCount ); i++ ) {
+            if ( noSectors > 1 ) for ( int i = 0; noSectors && ( i < sectorCount ); i++ ) {
                 if ( usedSector [i] ) {
                     if ( keepUnique [i] ) goto NonUnique;
                     noSectors--;
@@ -1082,111 +1275,103 @@ static bool PartitionNode ( NODE *node, SEG *rSegs, int noSegs, int *noLeft, int
         }
 
         // Splits may have 'upset' the lineDef ordering - some special effects
-        //   assume the SEGS appear in the same order as the lineDefs
+        //   assume the SEGS appear in the same order as the LINEDEFS
         if ( noSegs > 1 ) {
-            qsort ( rSegs, noSegs, sizeof ( SEG ), SortByLineDef );
+            qsort ( segs, noSegs, sizeof ( SEG ), SortByLineDef );
         }
 
         return false;
 
 NonUnique:
 
-        ComputeStaticVariables ( rSegs );
-        SortSectors ( rSegs, noSegs, noLeft, noRight );
+        ComputeStaticVariables ( segs );
+        SortSectors ( segs, noSegs, noLeft, noRight );
 
     } else if ( noSplits ) {
 
-        SplitSegs ( &rSegs [ *noRight ], noSplits );
+        SplitSegs ( &segs [ *noRight ], noSplits );
         *noLeft  += noSplits;
         *noRight += noSplits;
 
     }
 
-    node->Data.x  = ( SHORT ) X;
-    node->Data.y  = ( SHORT ) Y;
-    node->Data.dx = ( SHORT ) DX;
-    node->Data.dy = ( SHORT ) DY;
+    node->x  = ( SHORT ) X;
+    node->y  = ( SHORT ) Y;
+    node->dx = ( SHORT ) DX;
+    node->dy = ( SHORT ) DY;
 
-    SEG *lSegs = &rSegs [ *noRight ];
-    FindBounds ( &node->Data.side [0], rSegs, *noRight );
-    FindBounds ( &node->Data.side [1], lSegs, *noLeft );
+    FindBounds ( &node->side [0], segs, *noRight );
+    FindBounds ( &node->side [1], segs + *noRight, *noLeft );
 
     return true;
 }
 
 //----------------------------------------------------------------------------
 //  Recursively create the actual NODEs.  The given list of SEGs is analyzed
-//    and a partition is chosen.  If no partition can be found, a leaf NODE
+//    and a partition is chosen.  If no partition can be found, a leaf node
 //    is created.  Otherwise, the right and left SEGs are analyzed.  Features:
-//     A list of 'convex' aliases is maintained.  These are lines that border
+//    - A list of 'convex' aliases is maintained.  These are lines that border
 //      the list of SEGs and can never be partitions.  A line is marked as
 //      convex for this and all children, and unmarked before returing.
-//     Similarly, the alias chosen as the partition is marked as convex
+//    - Similarly, the alias chosen as the partition is marked as convex
 //      since it will be convex for all children.
 //----------------------------------------------------------------------------
-static NODE *CreateNode ( NODE *prev, SEG *rSegs, int &noSegs, SEG **nextSeg )
+static USHORT CreateNode ( SEG *segs, int *noSegs )
 {
     FUNCTION_ENTRY ( NULL, "CreateNode", true );
 
-    if ( nodesLeft-- == 0 ) {
-        fprintf ( stderr, "ERROR: nodePool exhausted\n" );
-        exit ( -1 );
-    }
-
-    NODE *node = nodePool++;
-    node->Next = NULL;
-    if ( prev ) prev->Next = node;
+    wNode tempNode;
 
     int noLeft, noRight;
     int *cptr = convexPtr;
 
-    if (( noSegs <= 1 ) || ( PartitionNode ( node, rSegs, noSegs, &noLeft, &noRight ) == false )) {
+    if (( *noSegs <= 1 ) || ( PartitionNode ( &tempNode, segs, *noSegs, &noLeft, &noRight ) == false )) {
         convexPtr = cptr;
-        if ( nodeStart == NULL ) nodeStart = node;
-        node->id = ( USHORT ) ( 0x8000 | CreateSSector ( noSegs, rSegs ));
         if ( showProgress ) ShowDone ();
-        if ( nextSeg != NULL ) *nextSeg = &rSegs [ noSegs ];
-        return node;
+        return ( USHORT ) ( 0x8000 | CreateSSector ( segs, *noSegs ));
     }
 
-    int alias = currentAlias->index;
+    int alias = currentAlias;
 
-    lineUsed [ alias ] = true;
+    lineUsed [ alias ] = 1;
     for ( int *tempPtr = cptr; tempPtr != convexPtr; tempPtr++ ) {
-        lineUsed [ *tempPtr ] = true;
+        lineUsed [ *tempPtr ] = 2;
     }
-
-    SEG *lSegs;
 
     if ( showProgress ) GoRight ();
-    NODE *rNode = CreateNode ( prev, rSegs, noRight, &lSegs );
-    node->Data.child [0] = rNode->id;
+
+    USHORT rNode = CreateNode ( segs, &noRight );
 
     if ( showProgress ) GoLeft ();
-    NODE *lNode = CreateNode ( rNode, lSegs, noLeft, NULL );
-    node->Data.child [1] = lNode->id;
+
+    USHORT lNode = CreateNode ( segs + noRight, &noLeft );
+
+    if ( showProgress ) Backup ();
+
+    *noSegs = noLeft + noRight;
 
     while ( convexPtr != cptr ) lineUsed [ *--convexPtr ] = false;
     lineUsed [ alias ] = false;
 
-    if ( showProgress ) Backup ();
+    if ( nodesLeft-- == 0 ) {
+        int delta  = ( 10 * nodeCount ) / 100;
+        nodePool   = ( wNode * ) realloc ( nodePool, sizeof ( wNode ) * ( nodeCount + delta ));
+        nodesLeft += delta;
+    }
 
-    lNode->Next = node;
-    node->id = ( USHORT ) nodeCount++;
+    wNode *node = &nodePool [nodeCount];
+    *node           = tempNode;
+    node->child [0] = rNode;
+    node->child [1] = lNode;
 
     if ( showProgress ) ShowDone ();
 
-    noSegs = noLeft + noRight;
-    if ( nextSeg != NULL ) *nextSeg = &rSegs [ noSegs ];
-
-    return node;
+    return ( USHORT ) nodeCount++;
 }
 
 wVertex  *GetVertices ()
 {
     FUNCTION_ENTRY ( NULL, "GetVertices", true );
-
-    TRACE ( "Factor: " << noVertices * FACTOR_VERTEX / maxVertices );
 
     wVertex *vert = new wVertex [ noVertices ];
     memcpy ( vert, newVertices, sizeof ( wVertex ) * noVertices );
@@ -1194,46 +1379,64 @@ wVertex  *GetVertices ()
     return vert;
 }
 
-wSSector *GetSSectors ( wSSector *first )
+wNode *GetNodes ( wNode *nodeList, int noNodes )
+{
+    FUNCTION_ENTRY ( NULL, "GetNodes", true );
+
+    wNode *nodes = new wNode [ noNodes ];
+
+    for ( int i = 0; i < noNodes; i++ ) {
+        nodes [i] = nodeList [i];
+    }
+
+    return nodes;
+}
+
+static wSegs *finalSegs;
+
+wSSector *GetSSectors ( wSSector *ssectorList, int noSSectors )
 {
     FUNCTION_ENTRY ( NULL, "GetSSectors", true );
 
-    TRACE ( "Factor: " << ssectorCount * FACTOR_SSECTOR / ( ssectorCount + ssectorsLeft ));
+    wSegs *segs = finalSegs = new wSegs [ segCount ];
 
-    wSSector *ssector = new wSSector [ ssectorCount ];
-    memcpy ( ssector, first, sizeof ( wSSector ) * ssectorCount );
+    for ( int i = 0; i < noSSectors; i++ ) {
+
+        int start = ssectorList[i].first;
+        ssectorList[i].first = ( USHORT ) ( segs - finalSegs );
+
+        // Copy the used SEGs to the final SEGs list
+        for ( int x = 0; x < ssectorList [i].num; x++ ) {
+            segs [x] = segStart [start+x].Data;
+        }
+
+        segs += ssectorList [i].num;
+    }
+
+    delete [] segStart;
+    segCount = segs - finalSegs;
+
+    wSSector *ssector = new wSSector [ noSSectors ];
+    memcpy ( ssector, ssectorList, sizeof ( wSSector ) * noSSectors );
+
     return ssector;
 }
 
 wSegs *GetSegs ()
 {
     FUNCTION_ENTRY ( NULL, "GetSegs", true );
-
-    TRACE ( "Factor: " << segCount * FACTOR_SEGS / maxSegs );
-
+/*
     wSegs *segs = new wSegs [ segCount ];
+
     for ( int i = 0; i < segCount; i++ ) {
         segs [i] = segStart [i].Data;
     }
+
     delete [] segStart;
+
     return segs;
-}
-
-wNode *GetNodes ()
-{
-    FUNCTION_ENTRY ( NULL, "GetNodes", true );
-
-    TRACE ( "Factor: " << ( maxNodes - nodesLeft ) * FACTOR_NODE / maxNodes );
-
-    wNode *nodes = new wNode [ nodeCount ];
-    for ( int i = 0; i < nodeCount; i++ ) {
-        while ( nodeStart->id & 0x8000 ) {
-            nodeStart = nodeStart->Next;
-        }
-        nodes [i] = nodeStart->Data;
-        nodeStart = nodeStart->Next;
-    }
-    return nodes;
+*/
+    return finalSegs;
 }
 
 //----------------------------------------------------------------------------
@@ -1248,20 +1451,22 @@ void CreateNODES ( DoomLevel *level, sBSPOptions *options )
 
     TRACE ( "Processing " << level->Name ());
 
+    // Sanity check on environment variables
     if ( X2 <= 0 ) X2 = 1;
     if ( Y2 <= 0 ) Y2 = 1;
 
-    showProgress = options->showProgress;
+    // Copy options to global variables
+    showProgress     = options->showProgress;
     uniqueSubsectors = options->keepUnique ? true : false;
+
     PartitionFunction = Algorithm1;
     if ( options->algorithm == 2 ) PartitionFunction = Algorithm2;
     if ( options->algorithm == 3 ) PartitionFunction = Algorithm3;
 
-    nodeStart    = NULL;
-    segStart     = NULL;
     nodeCount    = 0;
     ssectorCount = 0;
 
+    // Get rid of old SEGS and associated vertices
     level->NewSegs ( 0, NULL );
     level->TrimVertices ();
     level->PackVertices ();
@@ -1276,36 +1481,39 @@ void CreateNODES ( DoomLevel *level, sBSPOptions *options )
         memset ( keepUnique, true, sizeof ( bool ) * sectorCount );
     }
     maxVertices = ( int ) ( noVertices * FACTOR_VERTEX );
-    newVertices = new wVertex [ maxVertices ];
+    newVertices = ( wVertex * ) malloc ( sizeof ( wVertex ) * maxVertices );
     memcpy ( newVertices, level->GetVertices (), sizeof ( wVertex ) * noVertices );
 
     Status ( "Creating SEGS ... " );
     segStart = CreateSegs ( level, options );
 
     Status ( "Getting LineDef Aliases ... " );
-    GetLineDefAliases ( level );
+    noAliases = GetLineDefAliases ( level, segStart, segCount );
 
-    lineChecked = new bool [ noAliases ];
-    lineUsed = new bool [ noAliases ];
-    memset ( lineUsed, false, sizeof ( bool ) * noAliases );
+    lineChecked = new char [ noAliases ];
+    lineUsed    = new char [ noAliases ];
+    memset ( lineUsed, false, sizeof ( char ) * noAliases );
 
     Status ( "Creating Side Info ... " );
     CreateSideInfo ( level );
 
     score = ( options->algorithm == 2 ) ? new sScoreInfo [ noAliases ] : NULL;
+
     convexList = new int [ noAliases ];
-    convexPtr = convexList;
+    convexPtr  = convexList;
 
     Status ( "Creating NODES ... " );
     int noSegs = segCount;
-    NODE *firstNode = nodePool = new NODE [ maxNodes = nodesLeft = ( int ) ( FACTOR_NODE * level->LineDefCount ()) ];
-    wSSector *firstSSector = ssectorPool = new wSSector [ ssectorsLeft = ( int ) ( FACTOR_SSECTOR * level->SectorCount ()) ];
-    CreateNode ( NULL, segStart, noSegs, NULL );
+    nodesLeft = ( int ) ( FACTOR_NODE * level->SideDefCount ());
+    nodePool  = ( wNode * ) malloc( sizeof ( wNode ) * nodesLeft );
+    ssectorsLeft = ( int ) ( FACTOR_NODE * level->SideDefCount ());
+    ssectorPool = ( wSSector * ) malloc ( sizeof ( wSSector ) * ssectorsLeft );
+    CreateNode ( segStart, &noSegs );
 
     delete [] convexList;
     if ( score ) delete [] score;
 
-    // Clean Up temporary buffers
+    // Clean up temporary buffers
     Status ( "Cleaning up ... " );
     delete [] sideInfo;
     delete [] lineDefAlias;
@@ -1317,12 +1525,12 @@ void CreateNODES ( DoomLevel *level, sBSPOptions *options )
     sideInfo = NULL;
 
     level->NewVertices ( noVertices, GetVertices ());
+    level->NewNodes ( nodeCount, GetNodes ( nodePool, nodeCount ));
+    level->NewSubSectors ( ssectorCount, GetSSectors ( ssectorPool, ssectorCount ));
     level->NewSegs ( segCount, GetSegs ());
-    level->NewSubSectors ( ssectorCount, GetSSectors ( firstSSector ));
-    level->NewNodes ( nodeCount, GetNodes ());
 
-    delete [] newVertices;
-    delete [] firstSSector;
-    delete [] firstNode;
+    free ( newVertices );
+    free ( ssectorPool );
+    free ( nodePool );
     delete [] tempSeg;
 }

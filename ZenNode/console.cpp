@@ -6,7 +6,7 @@
 //
 // Description: Screen I/O routines for ZenNode
 //
-// Copyright (c) 2000-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 2000-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -70,6 +70,8 @@
 
 void SaveConsoleSettings ();
 void RestoreConsoleSettings ();
+void HideCursor ();
+void ShowCursor ();
 
 ULONG startX, startY;
 char  progress [4] = { 0x7C, 0x2F, 0x2D, 0x5C };
@@ -160,7 +162,11 @@ void MoveDown ( int delta )
 
 #elif defined ( __WIN32__ )
 
-static CONSOLE_SCREEN_BUFFER_INFO screenBufferInfo;
+#if defined ( __GNUC__ )
+#define cprintf _cprintf
+#endif
+
+static CONSOLE_SCREEN_BUFFER_INFO screenInfo;
 static CONSOLE_CURSOR_INFO        cursorInfo;
 static BOOL                       oldVisible;
 
@@ -193,15 +199,57 @@ void SaveConsoleSettings ()
 {
     hOutput = GetStdHandle ( STD_OUTPUT_HANDLE );
     GetConsoleCursorInfo ( hOutput, &cursorInfo );
+    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
     oldVisible = cursorInfo.bVisible;
-    cursorInfo.bVisible = false;
-    SetConsoleCursorInfo ( hOutput, &cursorInfo );
     SetUnhandledExceptionFilter ( myHandler );
     signal ( SIGBREAK, SignalHandler );
     signal ( SIGINT, SignalHandler );
     atexit ( RestoreConsoleSettings );
 
     QueryPerformanceFrequency ( &timerFrequency );
+}
+
+void HideCursor ()
+{
+    CONSOLE_CURSOR_INFO info = cursorInfo;
+    info.bVisible = FALSE;
+    SetConsoleCursorInfo ( hOutput, &info );
+}
+
+void ShowCursor ()
+{
+    CONSOLE_CURSOR_INFO info = cursorInfo;
+    info.bVisible = TRUE;
+    SetConsoleCursorInfo ( hOutput, &info );
+}
+
+#include <stdio.h>
+
+int GetKey ()
+{
+    int key = 0;
+    UCHAR *ptr = ( UCHAR * ) &key;
+    int ch = getch ();
+
+    if ( ch == 0xE0 ) {
+        *ptr++ = 0x1B;
+        *ptr++ = 0x5B;
+        ch = getch ();
+        switch ( ch ) {
+            case 0x48 : ch = 0x41;  break;
+            case 0x50 : ch = 0x42;  break;
+            case 0x4D : ch = 0x43;  break;
+            case 0x4B : ch = 0x44;  break;
+        }
+    }
+    *ptr++ = ( UCHAR ) ch;
+
+    return key;
+}
+
+bool KeyPressed ()
+{
+    return ( kbhit () != 0 ) ? true : false;
 }
 
 ULONG CurrentTime ()
@@ -214,9 +262,9 @@ ULONG CurrentTime ()
 
 void GetXY ( ULONG *x, ULONG *y )
 {
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
-    *x = screenBufferInfo.dwCursorPosition.X;
-    *y = screenBufferInfo.dwCursorPosition.Y;
+    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
+    *x = screenInfo.dwCursorPosition.X;
+    *y = screenInfo.dwCursorPosition.Y;
 }
 
 void GotoXY ( ULONG x, ULONG y )
@@ -235,9 +283,9 @@ void Status ( char *message )
     currentPos.Y = ( SHORT ) startY;
     if ( len ) {
         WriteConsoleOutputCharacter ( hOutput, message, len, currentPos, &count );
-        currentPos.X += ( SHORT ) len;
+        currentPos.X = ( SHORT ) ( currentPos.X + len );
     }
-    FillConsoleOutputCharacter ( hOutput, ' ', screenBufferInfo.dwSize.X - currentPos.X, currentPos, &count );
+    FillConsoleOutputCharacter ( hOutput, ' ', screenInfo.dwSize.X - currentPos.X, currentPos, &count );
 }
 
 void GoRight ()
@@ -274,19 +322,19 @@ void ShowProgress ()
 
 void MoveUp ( int delta )
 {
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
+    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
     COORD pos;
     pos.X = ( SHORT ) 0;
-    pos.Y = ( SHORT ) screenBufferInfo.dwCursorPosition.Y - ( SHORT ) delta;
+    pos.Y = ( SHORT ) ( screenInfo.dwCursorPosition.Y - delta );
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
 void MoveDown ( int delta )
 {
-    GetConsoleScreenBufferInfo ( hOutput, &screenBufferInfo );
+    GetConsoleScreenBufferInfo ( hOutput, &screenInfo );
     COORD pos;
     pos.X = ( SHORT ) 0;
-    pos.Y = ( SHORT ) screenBufferInfo.dwCursorPosition.Y + ( SHORT ) delta;
+    pos.Y = ( SHORT ) ( screenInfo.dwCursorPosition.Y + delta );
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
@@ -294,17 +342,21 @@ void MoveDown ( int delta )
 
 static FILE *console;
 static termios stored;
+static termios term_getch;
+static termios term_kbhit;
 static int lastChar;
 static int keyhit;
+static bool cursor_visible = true;
 
 extern char *strupr ( char *ptr );
 
-int getch ()
+int GetKey ()
 {
     int retVal = lastChar;
     lastChar = 0;
 
-    while ( keyhit == 0 ) {
+    if ( keyhit == 0 ) {
+        tcsetattr ( 0, TCSANOW, &term_getch );
         keyhit = read ( STDIN_FILENO, &retVal, sizeof ( retVal ));
     }
 
@@ -313,9 +365,10 @@ int getch ()
     return retVal;
 }
 
-bool kbhit ()
+bool KeyPressed ()
 {
     if ( keyhit == 0 ) {
+        tcsetattr ( 0, TCSANOW, &term_kbhit );
         keyhit = read ( STDIN_FILENO, &lastChar, sizeof ( lastChar ));
     }
 
@@ -360,17 +413,17 @@ void SignalHandler ( int signal )
 
 void SaveConsoleSettings ()
 {
-    termios newterm;
     tcgetattr ( 0, &stored );
-    memcpy ( &newterm, &stored, sizeof ( struct termios ));
+    memcpy ( &term_getch, &stored, sizeof ( struct termios ));
     // Disable echo
-    newterm.c_lflag &= ~ECHO;
+    term_getch.c_lflag &= ~ECHO;
     // Disable canonical mode, and set buffer size to 1 byte
-    newterm.c_lflag &= ~ICANON;
-    newterm.c_cc[VTIME] = 0;
-    newterm.c_cc[VMIN] = 0;
+    term_getch.c_lflag &= ~ICANON;
+    term_getch.c_cc[VMIN] = 1;
 
-    tcsetattr ( 0, TCSANOW, &newterm );
+    memcpy ( &term_kbhit, &term_getch, sizeof ( struct termios ));
+    term_kbhit.c_cc[VTIME] = 0;
+    term_kbhit.c_cc[VMIN] = 0;
 
     // Create a 'console' device
     console = fopen ( "/dev/tty", "w" );
@@ -378,9 +431,7 @@ void SaveConsoleSettings ()
         console = stdout;
     }
 
-    // Hide the cursor
-    fprintf ( console, "\033[?25l" );
-    fflush ( console );
+    HideCursor ();
 
     struct sigaction sa;
     memset ( &sa, 0, sizeof ( sa ));
@@ -405,9 +456,31 @@ void RestoreConsoleSettings ()
 
     tcsetattr ( 0, TCSANOW, &stored );
 
-    // Restore the cursor
-    fprintf ( console, "\033[?25h" );
-    fflush ( console );
+    ShowCursor ();
+}
+
+void ClearScreen ()
+{
+    printf ( "\033[2J" );
+    fflush ( stdout );
+}
+
+void HideCursor ()
+{
+    if ( cursor_visible == true ) {
+        printf ( "\033[?25l" );
+        fflush ( stdout );
+        cursor_visible = false;
+    }
+}
+
+void ShowCursor ()
+{
+    if ( cursor_visible == false ) {
+        printf ( "\033[?25h" );
+        fflush ( stdout );
+        cursor_visible = true;
+    }
 }
 
 void GetXY ( ULONG *x, ULONG *y )
@@ -467,13 +540,13 @@ void ShowProgress ()
 
 void MoveUp ( int delta )
 {
-    fprintf ( console, "\033[%dF", delta );
+    fprintf ( console, "\033[%dA", delta );
     fflush ( console );
 }
 
 void MoveDown ( int delta )
 {
-    fprintf ( console, "\033[%dE", delta );
+    fprintf ( console, "\033[%dB", delta );
     fflush ( console );
 }
 

@@ -6,7 +6,7 @@
 //
 // Description: The application specific code for ZenNode
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -69,8 +69,8 @@ DBG_REGISTER ( __FILE__ );
     LOG_FLAGS g_LogFlags;
 #endif
 
-#define VERSION		"1.0.8"
-#define BANNER          "ZenNode Version " VERSION " (c) 1994-2001 Marc Rousseau"
+#define VERSION		"1.1.0"
+#define BANNER          "ZenNode Version " VERSION " (c) 1994-2002 Marc Rousseau"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
 
@@ -92,6 +92,10 @@ extern ULONG startX, startY;
 
 void SaveConsoleSettings ();
 void RestoreConsoleSettings ();
+void HideCursor ();
+void ShowCursor ();
+int GetKey ();
+bool KeyPressed ();
 
 #if defined ( __OS2__ )
 
@@ -103,6 +107,10 @@ void RestoreConsoleSettings ();
 #define SEPERATOR	'\\'
 #define DEFAULT_CHAR	'û'
 
+#if defined ( __GNUC__ )
+#define cprintf _cprintf
+#endif
+
 #elif defined ( __GNUC__ )
 
 #define SEPERATOR	'/'
@@ -112,8 +120,6 @@ void RestoreConsoleSettings ();
 
 extern void cprintf ( char *, ... );
 extern char *strupr ( char *ptr );
-extern int getch ();
-extern bool kbhit ();
 
 #endif
 
@@ -379,6 +385,13 @@ int getLevels ( int argIndex, char *argv [], char names [][MAX_LUMP_NAME], wadLi
 void EnsureExtension ( char *fileName, const char *ext )
 {
     FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
+
+    // See if the file exists first
+    FILE *file = fopen ( fileName, "rb" );
+    if ( file != NULL ) {
+        fclose ( file );
+        return;
+    }
 
     int length = strlen ( fileName );
     if ( stricmp ( &fileName [length-4], ext ) != 0 ) {
@@ -863,8 +876,11 @@ char *ConvertNumber ( ULONG value )
 int main ( int argc, char *argv [] )
 {
     FUNCTION_ENTRY ( NULL, "main", true );
- 
+  
     SaveConsoleSettings ();
+    HideCursor ();
+
+    printf ( "%d\n", __GNUC__ );
 
     cprintf ( "%s\r\n\r\n", BANNER );
     if ( ! isatty ( fileno ( stdout ))) fprintf ( stdout, "%s\n\n", BANNER );
@@ -897,7 +913,7 @@ int main ( int argc, char *argv [] )
     int argIndex = 1;
     int totalLevels = 0, totalTime = 0, totalUpdates = 0;
 
-    while ( kbhit ()) getch ();
+    while ( KeyPressed ()) GetKey ();
 
     do {
 
@@ -920,14 +936,16 @@ int main ( int argc, char *argv [] )
             break;
         }
 
-        int noLevels = 0, updateCount = 0;
+        int noLevels = 0;
+        // Trick the code into writing an output file if two or more wads are being merged
+        int updateCount = myList->wadCount () - 1;
 
         do {
 
             ULONG ellapsedTime;
             if ( ProcessLevel ( levelNames [noLevels++], myList, &ellapsedTime )) updateCount++;
             totalTime += ellapsedTime;
-            if ( kbhit () && ( getch () == 0x1B )) break;
+            if ( KeyPressed () && ( GetKey () == 0x1B )) break;
 
         } while ( levelNames [noLevels][0] );
 
@@ -952,6 +970,9 @@ int main ( int argc, char *argv [] )
             }
         }
         cprintf ( "\r\n" );
+
+        // Undo the bogus update level count
+        updateCount -= myList->wadCount () - 1;
 
         totalLevels += noLevels;
         totalUpdates += updateCount;

@@ -6,7 +6,7 @@
 //
 // Description: Definitions of structures used by the ZenNode routines
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -59,30 +59,22 @@ struct sRejectOptions {
 typedef unsigned short BAM;
 typedef long double REAL;	// Must have at least 50 significant bits
 
+struct sVertex {
+    double x;
+    double y;
+};
+
 struct SEG {
     wSegs           Data;
     const wLineDef *LineDef;
     int             Sector;
     int             Side;
+    int             AliasFlip;
     bool            Split;
     bool            DontSplit;
-};
-
-struct NODE {
-    SHORT     id;
-    wNode     Data;
-    NODE     *Next;
-};
-
-struct sAlias {
-    int       index;			// 1st co-linear lineDef
-    int       flip;			// different dir. from 1st lineDef
-};
-
-struct sSectorInfo {
-    int       index;
-    int       noSubSectors;
-    int      *subSector;
+    bool            final;
+    sVertex         start;
+    sVertex         end;
 };
 
 struct sBSPOptions {
@@ -127,6 +119,38 @@ struct sScoreInfo {
 
 #define IS_LEFT_RIGHT(s)	( s & 1 )
 #define FLIP(c,s)		( c ^ s )
+
+
+// ----- C99 routines from <math.h> Required by ZenNode -----
+
+#if defined ( __GNUC__ ) && ( __GNUC__ < 3 )
+
+    __inline long lrint ( double flt )
+    {
+        int intgr;
+
+        __asm__ __volatile__ ("fistpl %0" : "=m" (intgr) : "t" (flt) : "st");
+
+        return intgr;
+    }
+
+#elif defined ( _MSC_VER )
+
+    __inline long lrint ( double flt )
+    {
+        int intgr;
+
+        _asm
+        {
+            fld   flt
+            fistp intgr
+        };
+
+        return intgr;
+    }
+
+#endif
+
 
 extern void CreateNODES ( DoomLevel *level, sBSPOptions *options );
 extern int  CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options );

@@ -6,7 +6,7 @@
 //
 // Description: Object classes for manipulating Doom WAD files
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -536,12 +536,14 @@ const wadDirEntry *WAD::FindDir ( const char *name, const wadDirEntry *start, co
 {
     ULONG i = 0, last = m_Header.dirSize - 1;
     if ( start != NULL ) {
-        i = IndexOf ( start );
-        if ( i == ( ULONG ) -1 ) return NULL;
+        ULONG index = IndexOf ( start );
+        if ( index == ( ULONG ) -1 ) return NULL;
+        if ( index > i ) i = index;
     }
     if ( end != NULL ) {
-        last = IndexOf ( end );
-        if ( last == ( ULONG ) -1 ) return NULL;
+        ULONG index = IndexOf ( end );
+        if ( index == ( ULONG ) -1 ) return NULL;
+        if ( index < last ) last = index;
     }
     const wadDirEntry *dir = &m_Directory [i];
     for ( ; i <= last; i++, dir++ ) {
@@ -1036,6 +1038,7 @@ bool wadList::Save ( const char *newName )
         const char *tempName = newName;
         if ( stricmp ( wadPath, newPath ) == 0 ) {
             tempName = tmpnam ( NULL );
+fprintf ( stderr, "Save - tempName = %s\n", tempName );
         }
     
         FILE *tmpFile = fopen ( tempName, "wb" );
@@ -1043,7 +1046,7 @@ bool wadList::Save ( const char *newName )
 
         bool errors = false;
         wadHeader m_Header;
-        if ( fwrite ( &m_Header,  sizeof ( m_Header ), 1, tmpFile ) != 1 ) {
+        if ( fwrite ( &m_Header, sizeof ( m_Header ), 1, tmpFile ) != 1 ) {
             errors = true;
             fprintf ( stderr, "\nERROR: wadList::Save - Error writing dummy m_Header." );
         }

@@ -6,7 +6,7 @@
 //
 // Description: Object classes for manipulating Doom Maps
 //
-// Copyright (c) 1994-2001 Marc Rousseau, All Rights Reserved.
+// Copyright (c) 1994-2002 Marc Rousseau, All Rights Reserved.
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -57,6 +57,7 @@ DoomLevel::DoomLevel ( const char *_name, WAD *_wad, bool bLoadData ) :
     m_Title ( NULL ),
     m_Music ( NULL ),
     m_Cluster ( 0 ),
+    m_MapDataSize ( 0 ),
     m_NoThings ( 0 ),
     m_NoLineDefs ( 0 ),
     m_NoSideDefs ( 0 ),
@@ -79,6 +80,7 @@ DoomLevel::DoomLevel ( const char *_name, WAD *_wad, bool bLoadData ) :
     m_NodesChanged ( false ),
     m_RejectChanged ( false ),
     m_BlockMapChanged ( false ),
+    m_MapData ( NULL ),
     m_Thing ( NULL ),
     m_LineDef ( NULL ),
     m_SideDef ( NULL ),
@@ -292,6 +294,7 @@ void DoomLevel::CleanUp ()
     if ( m_RawThing )   { delete [] m_RawThing;    m_RawThing   = NULL; }
     if ( m_RawLineDef ) { delete [] m_RawLineDef;  m_RawLineDef = NULL; }
 
+    if ( m_MapData )    { delete [] m_MapData;     m_MapData    = NULL; }
     if ( m_Thing )      { delete [] m_Thing;       m_Thing      = NULL; }
     if ( m_LineDef )    { delete [] m_LineDef;     m_LineDef    = NULL; }
     if ( m_SideDef )    { delete [] m_SideDef;     m_SideDef    = NULL; }
@@ -603,6 +606,9 @@ int DoomLevel::Load ()
 
     m_NewFormat = ( start->size > 0 ) ? true : false;
 
+    m_MapData = ( char * ) m_Wad->ReadEntry ( start, &temp );
+    m_MapDataSize = temp;
+
     start += 1;
 
     bool wrongFormat = true;
@@ -742,7 +748,7 @@ void DoomLevel::LoadHexenInfo ()
 
 void DoomLevel::AddToWAD ( WAD *m_Wad )
 {
-    m_Wad->InsertAfter (( const wLumpName * ) Name (), 0L, ( void * ) "", false );
+    m_Wad->InsertAfter (( const wLumpName * ) Name (), m_MapDataSize, m_MapData, false );
 
     ULONG size1, size2;
     if ( m_NewFormat ) {
@@ -845,7 +851,7 @@ bool DoomLevel::UpdateWAD ()
         m_SideDefsChanged = false;
         dir = m_Wad->FindDir ( "SIDEDEFS", start, end );
         if ( dir == NULL ) {
-            fprintf ( stderr, "Invalid map - m_No SIDEDEFS!\n" );
+            fprintf ( stderr, "Invalid map - no SIDEDEFS!\n" );
         } else {
             changed |= m_Wad->WriteEntry ( dir, m_NoSideDefs * sizeof ( wSideDef ), m_SideDef, false );
         }
@@ -854,7 +860,7 @@ bool DoomLevel::UpdateWAD ()
         m_VerticesChanged = false;
         dir = m_Wad->FindDir ( "VERTEXES", start, end );
         if ( dir == NULL ) {
-            fprintf ( stderr, "Invalid map - m_No SIDEDEFS!\n" );
+            fprintf ( stderr, "Invalid map - no SIDEDEFS!\n" );
         } else {
             changed |= m_Wad->WriteEntry ( dir, m_NoVertices * sizeof ( wVertex ), m_Vertex, false );
         }
