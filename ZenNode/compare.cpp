@@ -341,14 +341,16 @@ int ProcessLevel ( char *name, wadList *myList1, wadList *myList2 )
     GetXY ( &startX, &startY );
 
     DoomLevel *tgtLevel = NULL;
-    DoomLevel *srcLevel = new DoomLevel ( name, myList1 );
+    const wadListDirEntry *dir = myList1->FindWAD ( name );
+    DoomLevel *srcLevel = new DoomLevel ( name, dir->wad );
     if ( srcLevel->isValid () == false ) {
         change = -1000;
         Status ( "This level is not valid... " );
         goto done;
     }
 
-    tgtLevel = new DoomLevel ( name, myList2 );
+    dir = myList2->FindWAD ( name );
+    tgtLevel = new DoomLevel ( name, dir->wad );
     if ( tgtLevel->isValid () == false ) {
         change = -1000;
         Status ( "This level is not valid... " );

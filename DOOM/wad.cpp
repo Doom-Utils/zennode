@@ -61,31 +61,49 @@ void _fullpath ( char *full, const char *name, int max )
 
 WAD::WAD ( const char *filename )
 {
-    valid = false;
+    wadName = ( filename ) ? strdup ( filename ) : strdup ( "" );
+    wadFile = NULL;
+
+    list = NULL;
+
+    valid      = false;
     registered = false;
     dirChanged = false;
-    wadStatus = ws_UNKNOWN;
-    wadType = wt_UNKNOWN;
-    wadStyle = wst_UNKNOWN;
+
     memset ( &header, 0, sizeof ( header ));
-    wadFile = NULL;
+
     directory = NULL;
-    dirInfo = NULL;
+    dirInfo   = NULL;
+
+    wadStatus = ws_UNKNOWN;
+    wadType   = wt_UNKNOWN;
+    wadStyle  = wst_UNKNOWN;
+
     mapStart = mapEnd = NULL;
+    mapStart = mapEnd = NULL;
+    spriteStart = spriteEnd = NULL;
+    patchStart = patchEnd = NULL;
+    flatStart = flatEnd = NULL;
+
+    newData = NULL;
+
     if ( filename ) {
-        wadName = strdup ( filename );
         OpenFile ();
-    } else {
-        wadName = strdup ( "" );
     }
 }
 
 WAD::~WAD ()
 {
     CloseFile ();
+
     free ( wadName );
 }
 
+void WAD::SetList ( wadList *_list )
+{
+    list = _list;
+}
+
 bool WAD::isMap ( const char *name )
 {
     if ( name == NULL ) return false;
@@ -292,7 +310,7 @@ void WAD::CloseFile ()
     }
     dirInfo = NULL;
 
-    if ( directory ) delete directory;
+    if ( directory ) delete [] directory;
     directory = NULL;
 
     mapStart = mapEnd = NULL;
@@ -333,7 +351,7 @@ void WAD::FindMarkers ()
 
 void WAD::readMasterDir ()
 {
-    if ( directory ) delete directory;
+    if ( directory ) delete [] directory;
     directory = new wadDirEntry [ header.dirSize ];
     dirInfo = new wadDirInfo [ header.dirSize ];
     for ( ULONG i = 0; i < header.dirSize; i++ ) {
@@ -406,7 +424,7 @@ bool WAD::EnlargeDirectory ( int holePos, int entries )
     memcpy ( newInfo, dirInfo, sizeof ( wadDirInfo ) * loCount );
     memcpy ( newInfo + loCount + entries, dirInfo + loCount, sizeof ( wadDirInfo ) * hiCount );
 
-    if ( directory ) delete directory;
+    if ( directory ) delete [] directory;
     directory = newDir;
 
     if ( dirInfo ) delete dirInfo;
@@ -429,6 +447,8 @@ bool WAD::ReduceDirectory ( int holePos, int entries )
     }
     header.dirSize -= entries;
 
+    if ( list != NULL ) list->UpdateDirectory ();
+
     return true;
 }
 
@@ -443,7 +463,11 @@ bool WAD::InsertBefore ( const wLumpName *name, ULONG newSize, void *newStuff, b
     wadDirEntry *newDir = &directory [ index ];
     strncpy ( newDir->name, ( char * ) name, sizeof ( wLumpName ));
 
-    return WriteEntry ( newDir, newSize, newStuff, owner );
+    bool retVal = WriteEntry ( newDir, newSize, newStuff, owner );
+
+    if ( list != NULL ) list->UpdateDirectory ();
+
+    return retVal;
 }
 
 bool WAD::InsertAfter ( const wLumpName *name, ULONG newSize, void *newStuff, bool owner, const wadDirEntry *entry )
@@ -459,7 +483,11 @@ bool WAD::InsertAfter ( const wLumpName *name, ULONG newSize, void *newStuff, bo
     wadDirEntry *newDir = &directory [ index ];
     strncpy ( newDir->name, ( char * ) name, sizeof ( wLumpName ));
 
-    return WriteEntry ( newDir, newSize, newStuff, owner );
+    bool retVal = WriteEntry ( newDir, newSize, newStuff, owner );
+
+    if ( list != NULL ) list->UpdateDirectory ();
+
+    return retVal;
 }
 
 bool WAD::Remove ( const wLumpName *lump, const wadDirEntry *start, const wadDirEntry *end )
@@ -497,7 +525,7 @@ bool WAD::SaveFile ( const char *newName )
     if ( tmpFile == NULL ) return false;
 
     bool errors = false;
-    if ( fwrite ( &header,  sizeof ( header ), 1, tmpFile ) != 1 ) {
+    if ( fwrite ( &header, sizeof ( header ), 1, tmpFile ) != 1 ) {
         errors = true;
 //      fprintf ( stderr, "ERROR: WAD::SaveFile - Error writing dummy header.\n" );
     }
@@ -594,7 +622,7 @@ wadList::~wadList ()
         delete List;
         List = temp;
     }
-    if ( directory ) delete directory;
+    if ( directory ) delete [] directory;
 }
 
 int wadList::wadCount () const
@@ -634,7 +662,7 @@ void wadList::Clear ()
         delete ptr;
         ptr = next;
     }
-    if ( directory ) delete directory;
+    if ( directory ) delete [] directory;
 
     dirSize = 0;
     maxSize = 0;
@@ -642,6 +670,16 @@ void wadList::Clear ()
     List = NULL;
     wadType = wt_UNKNOWN;
     wadStyle = wst_UNKNOWN;
+}
+
+void wadList::UpdateDirectory ()
+{
+    dirSize = 0;
+    wadListEntry *ptr = List;
+    while ( ptr ) {
+        AddDirectory ( ptr->wad );
+        ptr = ptr->Next;
+    }
 }
 
 bool wadList::Add ( WAD *wad )
@@ -677,21 +715,22 @@ bool wadList::Add ( WAD *wad )
     
     wadListEntry *newNode = new wadListEntry;
     newNode->wad = wad;
-    newNode->Next = List;
-    List = newNode;
-
-    // Make sure AddDirectory has enough room to work
-    if ( dirSize + wad->DirSize () > maxSize ) {
-        maxSize = dirSize + wad->DirSize ();
-        wadListDirEntry *temp = new wadListDirEntry [ maxSize ];
-        if ( directory ) {
-            memcpy ( temp, directory, sizeof ( wadListDirEntry ) * dirSize );
-            delete directory;
-        }   
-        directory = temp;
+    newNode->Next = NULL;
+    
+    if ( List == NULL ) {
+        List = newNode;
+    } else {
+        wadListEntry *ptr = List;
+        while ( ptr->Next ) {
+            ptr = ptr->Next;
+        }
+        ptr->Next = newNode;
     }
 
     AddDirectory ( wad, List->Next ? true : false );
+
+    wad->SetList ( this );
+
     return true;
 }
 
@@ -716,7 +755,9 @@ bool wadList::Remove ( WAD *wad )
             ptr = ptr->Next;
         }
     }
+
     if ( found ) {
+        wad->SetList ( NULL );
         dirSize = 0;
         ptr = List;
         while ( ptr ) {
@@ -724,7 +765,9 @@ bool wadList::Remove ( WAD *wad )
             ptr = ptr->Next;
         }
     }
+
     if ( dirSize == 0 ) wadType = wt_UNKNOWN;
+
     return found;
 }
 
@@ -737,7 +780,7 @@ int wadList::AddLevel ( ULONG index, const wadDirEntry *&entry, WAD *wad )
 {
     int size = 0;
     const wadDirEntry *start = entry + 1;
-    const wadDirEntry *end = entry + 9;
+    const wadDirEntry *end = entry + 11;
 
     if ( wad->FindDir ( "THINGS",    start, end )) size++;
     if ( wad->FindDir ( "LINEDEFS",  start, end )) size++;
@@ -749,6 +792,7 @@ int wadList::AddLevel ( ULONG index, const wadDirEntry *&entry, WAD *wad )
     if ( wad->FindDir ( "SECTORS",   start, end )) size++;
     if ( wad->FindDir ( "REJECT",    start, end )) size++;
     if ( wad->FindDir ( "BLOCKMAP",  start, end )) size++;
+    if ( wad->FindDir ( "BEHAVIOR",  start, end )) size++;
 
     if ( index == dirSize ) {
         dirSize += size;
@@ -774,6 +818,17 @@ int wadList::AddLevel ( ULONG index, const wadDirEntry *&entry, WAD *wad )
 
 void wadList::AddDirectory ( WAD *wad, bool check )
 {
+    // Make sure AddDirectory has enough room to work
+    if ( dirSize + wad->DirSize () > maxSize ) {
+        maxSize = dirSize + wad->DirSize ();
+        wadListDirEntry *temp = new wadListDirEntry [ maxSize ];
+        if ( directory ) {
+            memcpy ( temp, directory, sizeof ( wadListDirEntry ) * dirSize );
+            delete [] directory;
+        }   
+        directory = temp;
+    }
+
     const wadDirEntry *newDir = wad->GetDir ( 0 );
     ULONG count = wad->DirSize ();
     while ( count ) {
@@ -805,21 +860,18 @@ const wadListDirEntry *wadList::GetDir ( ULONG index ) const
 
 const wadListDirEntry *wadList::FindWAD ( const char *name, const wadListDirEntry *start, const wadListDirEntry *end ) const
 {
-    ULONG i = 0, last = dirSize - 1;
-    if ( start ) {
-        i = indexOf ( start );
-        if ( i == ( ULONG ) -1 ) return NULL;
-    }
-    if ( end ) {
-        last = indexOf ( end );
-        if ( last == ( ULONG ) -1 ) return NULL;
-    }
+    int i = 0, last = dirSize;
 
-    const wadListDirEntry *dir = &directory [i];
-    for ( ; i <= last; i++, dir++ ) {
+    if ( start ) i = indexOf ( start );
+    if ( end ) last = indexOf ( end );
+
+
+    for ( ; i < last; i++ ) {
+        const wadListDirEntry *dir = &directory [i];
         if ( dir->entry->name[0] != name[0] ) continue;
         if ( strncmp ( dir->entry->name, name, 8 ) == 0 ) return dir;
     }
+
     return NULL;
 }
 
@@ -886,7 +938,7 @@ bool wadList::Save ( const char *newName )
                 errors = true;
 //              fprintf ( stderr, "\nERROR: wadList::Save - Error reading entry %8.8s. (%04X)", srcDir->entry->name, srcDir->wad->Status ());
             }
-            if ( fwrite ( ptr, dir[i].size, 1, tmpFile ) != 1 ) {
+            if (( dir[i].size > 0 ) && ( fwrite ( ptr, dir[i].size, 1, tmpFile ) != 1 )) {
                 errors = true;
 //                fprintf ( stderr, "\nERROR: wadList::Save - Error writing entry %8.8s.", srcDir->entry->name );
             }
@@ -895,7 +947,7 @@ bool wadList::Save ( const char *newName )
             srcDir++;
         }
 
-        * ( ULONG * ) header.type = wad->Type ();
+        * ( ULONG * ) header.type = wad->Format ();
         header.dirSize = dirSize;
         header.dirStart = ftell ( tmpFile );
 
@@ -948,7 +1000,8 @@ bool wadList::Extract ( const wLumpName *res, const char *wadName )
     for ( int i = 0; res [i][0]; i++ ) {
         if ( WAD::isMap ( res[i] )) {
             hasMaps = true;
-            DoomLevel *level = new DoomLevel ( res[i], this, true );
+            const wadListDirEntry *dir = FindWAD ( res[i] );
+            DoomLevel *level = new DoomLevel ( res[i], dir->wad, true );
             level->AddToWAD ( newWad );
             delete level;
         } else {

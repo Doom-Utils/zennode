@@ -66,7 +66,7 @@
     #include "logger.hpp"
 #endif
 
-#define VERSION		"1.0.3"
+#define VERSION		"1.0.4"
 #define BANNER          "ZenNode Version " VERSION " (c) 1994-2000 Marc Rousseau\r\n\r\n"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
@@ -495,7 +495,7 @@ void ReadSection ( FILE *file, int max, bool *array )
 void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options )
 {
     char fileName [ 256 ];
-    const wadListDirEntry *dir = myList->FindWAD ( curLevel->Name (), NULL, NULL );
+    const wadListDirEntry *dir = myList->FindWAD ( curLevel->Name ());
     strcpy ( fileName, dir->wad->Name ());
     char *ptr = &fileName [ strlen ( fileName )];
     while ( *--ptr != '.' );
@@ -606,10 +606,12 @@ ULONG CheckREJECT ( DoomLevel *curLevel )
     int size = curLevel->RejectSize ();
     int noSectors = curLevel->SectorCount ();
     int mask = ( 0xFF00 >> ( size * 8 - noSectors * noSectors )) & 0xFF;
-    UCHAR *ptr = ( UCHAR * ) curLevel->GetReject ();
     int count = 0;
-    while ( size-- ) count += HammingTable [ *ptr++ ];
-    count -= HammingTable [ ptr[-1] & mask ];
+    if ( curLevel->GetReject () != 0 ) {
+        UCHAR *ptr = ( UCHAR * ) curLevel->GetReject ();
+        while ( size-- ) count += HammingTable [ *ptr++ ];
+        count -= HammingTable [ ptr[-1] & mask ];
+    }
     return ( ULONG ) ( 1000.0 * count / ( noSectors * noSectors ) + 0.5 );
 }
 
@@ -628,7 +630,8 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
     cprintf ( "\r  %-*.*s: ", MAX_LUMP_NAME, MAX_LUMP_NAME, name );
     GetXY ( &startX, &startY );
 
-    DoomLevel *curLevel = new DoomLevel ( name, myList );
+    const wadListDirEntry *dir = myList->FindWAD ( name );
+    DoomLevel *curLevel = new DoomLevel ( name, dir->wad );
     if ( curLevel->isValid () == false ) {
         Status ( "This level is not valid... " );
         cprintf ( "\r\n" );

@@ -175,7 +175,7 @@ struct wBlockMap {
 
 class DoomLevel {
 
-    wadList    *myList;
+    WAD        *wad;
     wLumpName	name;
     bool        modified;
     bool        valid;
@@ -238,11 +238,11 @@ class DoomLevel {
     int  Load ();
     void LoadHexenInfo ();
 
-    void ReadThings ( bool, const wadListDirEntry *&, const wadListDirEntry * );
-    bool ReadLineDefs ( const wadListDirEntry *&, const wadListDirEntry * );
+    void ReadThings ( bool, const wadDirEntry *, const wadDirEntry * );
+    bool ReadLineDefs ( const wadDirEntry *, const wadDirEntry * );
 
-    bool SaveThings ( const wadListDirEntry *&, const wadListDirEntry * );
-    bool SaveLineDefs ( const wadListDirEntry *&, const wadListDirEntry * );
+    bool SaveThings ( const wadDirEntry *, const wadDirEntry * );
+    bool SaveLineDefs ( const wadDirEntry *, const wadDirEntry * );
 	    
 #if defined ( BIG_ENDIAN )
     void AdjustByteOrder ();
@@ -254,10 +254,10 @@ class DoomLevel {
 
 public:
 
-    DoomLevel ( const char *, wadList *, bool = true );
+    DoomLevel ( const char *, WAD *, bool = true );
     ~DoomLevel ();
 
-    const wadList *List () const		{ return myList; }
+    const WAD *GetWAD () const			{ return wad; }
 
     const char *Name () const			{ return name; }
     const char *Title () const			{ return title ? title : name; }

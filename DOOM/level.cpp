@@ -48,8 +48,8 @@ char *strupr ( char *ptr )
 
 #endif
 
-DoomLevel::DoomLevel ( const char *_name, wadList *list, bool loadData ) :
-    myList ( list )
+DoomLevel::DoomLevel ( const char *_name, WAD *_wad, bool loadData ) :
+    wad ( _wad )
 {
     WipeOut ();
 
@@ -57,13 +57,15 @@ DoomLevel::DoomLevel ( const char *_name, wadList *list, bool loadData ) :
     music = NULL;
     cluster = -1;
     newFormat = false;
+
     memset ( name, 0, sizeof ( name ));
-    strncpy ( name, _name, 8 );
     for ( int i = 0; i < 8; i++ ) {
-        if ( name[i] ) name[i] = ( char ) toupper ( name[i] );
+        if ( _name[i] == '\0' ) break;
+        name[i] = ( char ) toupper ( _name[i] );
     }
 
     if ( loadData ) Load ();
+
     LoadHexenInfo ();
 }
 
@@ -123,7 +125,7 @@ bool DoomLevel::isValid ()
     delete [] used;
     
     // Sanity check for SEGS
-    for ( i = 0; i < noLineDefs; i++ ) {
+    for ( i = 0; i < noSegs; i++ ) {
         if ( segs [i].start >= noVertices ) {
             fprintf ( stderr, "SEGS[%d].%s vertex is invalid (%d/%d)\n", i, "start", segs [i].start, noVertices );
             valid = false;
@@ -187,11 +189,11 @@ bool DoomLevel::hasChanged () const	{ return modified; }
 
 void DoomLevel::DeleteTransients ()
 {
-    if ( segs ) 	{ delete segs;		segs = NULL; }
+    if ( segs ) 	{ delete segs;		segs      = NULL; }
     if ( subSector )	{ delete subSector;	subSector = NULL; }
-    if ( node )		{ delete node;		node = NULL; }
-    if ( reject )	{ delete reject;	reject = NULL; }
-    if ( blockMap )	{ delete blockMap;	blockMap = NULL; }
+    if ( node )		{ delete node;		node      = NULL; }
+    if ( reject )	{ delete reject;	reject    = NULL; }
+    if ( blockMap )	{ delete blockMap;	blockMap  = NULL; }
 }
 
 void DoomLevel::WipeOut ()
@@ -475,15 +477,17 @@ void DoomLevel::ConvertLineDefToRaw2 ( int max, wLineDef *src, wLineDef2 *dest )
     }
 }
 
-void DoomLevel::ReadThings ( bool testFormat, const wadListDirEntry *&start, const wadListDirEntry *end )
+void DoomLevel::ReadThings ( bool testFormat, const wadDirEntry *start, const wadDirEntry *end )
 {
     ULONG temp;
-    const wadListDirEntry *dir = myList->FindWAD ( "THINGS", start, end );
+
+    const wadDirEntry *dir = wad->FindDir ( "THINGS", start, end );
     if ( dir == NULL ) return;
+
     // Make sure this isn't really a HEXEN wad in disguise
     if ( testFormat && ( newFormat == false )) {
-        wThing1 *testThing = ( wThing1 * ) dir->wad->ReadEntry ( dir->entry, &temp, true );
-        int count = dir->entry->size / sizeof ( wThing1 );
+        wThing1 *testThing = ( wThing1 * ) wad->ReadEntry ( dir, &temp, true );
+        int count = dir->size / sizeof ( wThing1 );
         // sizeof ( wThing2 ) is a multiple of sizeof ( wThing1 )
         if (( count & 0x0001 ) == 0 ) {
             int minX = 65536, noType0s = 0, noX0s = 0, noBadAngles = 0;
@@ -502,7 +506,9 @@ void DoomLevel::ReadThings ( bool testFormat, const wadListDirEntry *&start, con
         }
         delete testThing;
     }
-    rawThing = dir->wad->ReadEntry ( dir->entry, &temp );
+
+    rawThing = wad->ReadEntry ( dir, &temp );
+
     if ( newFormat ) {
         noThings = temp / sizeof ( wThing2 );
         thing = new wThing [ noThings ];
@@ -514,16 +520,16 @@ void DoomLevel::ReadThings ( bool testFormat, const wadListDirEntry *&start, con
     }
 }
 
-bool DoomLevel::ReadLineDefs ( const wadListDirEntry *&start, const wadListDirEntry *end )
+bool DoomLevel::ReadLineDefs ( const wadDirEntry *start, const wadDirEntry *end )
 {
     ULONG temp;
-    const wadListDirEntry *dir = myList->FindWAD ( "LINEDEFS", start, end );
+    const wadDirEntry *dir = wad->FindDir ( "LINEDEFS", start, end );
 
     // Make sure we have the correct format
-    if (( newFormat == true ) && ( dir->entry->size % sizeof ( wLineDef2 ))) return true;
-    if (( newFormat == false ) && ( dir->entry->size % sizeof ( wLineDef1 ))) return true;
+    if (( newFormat == true ) && ( dir->size % sizeof ( wLineDef2 ))) return true;
+    if (( newFormat == false ) && ( dir->size % sizeof ( wLineDef1 ))) return true;
 
-    rawLineDef = dir->wad->ReadEntry ( dir->entry, &temp );
+    rawLineDef = wad->ReadEntry ( dir, &temp );
     if ( newFormat ) {
         noLineDefs = temp / sizeof ( wLineDef2 );
         lineDef = new wLineDef [ noLineDefs ];
@@ -541,17 +547,17 @@ bool DoomLevel::ReadLineDefs ( const wadListDirEntry *&start, const wadListDirEn
 
 int DoomLevel::Load ()
 {
-    if ( myList == NULL ) return false;
+    if ( wad == NULL ) return false;
 
-    const wadListDirEntry *dir;
-    const wadListDirEntry *start = myList->FindWAD ( Name ());
-    const wadListDirEntry *end = start + min ( 10, myList->DirSize () - 1 );
+    const wadDirEntry *dir;
+    const wadDirEntry *start = wad->FindDir ( Name ());
+    const wadDirEntry *end = start + min ( 10, wad->DirSize () - 1 );
 
     if ( start == NULL ) return false;
 
     ULONG temp;
 
-    newFormat = ( start->entry->size > 0 ) ? true : false;
+    newFormat = ( start->size > 0 ) ? true : false;
 
     start += 1;
 
@@ -570,45 +576,48 @@ int DoomLevel::Load ()
         valid = true;
     }
 
-    dir = myList->FindWAD ( "SIDEDEFS", start, end );
+    dir = wad->FindDir ( "SIDEDEFS", start, end );
     if ( dir == NULL ) return false;
-    sideDef = ( wSideDef * ) dir->wad->ReadEntry ( dir->entry, &temp );
+    sideDef = ( wSideDef * ) wad->ReadEntry ( dir, &temp );
     noSideDefs = temp / sizeof ( wSideDef );
 
-    dir = myList->FindWAD ( "VERTEXES", start, end );
+    dir = wad->FindDir ( "VERTEXES", start, end );
     if ( dir == NULL ) return false;
-    vertex = ( wVertex * ) dir->wad->ReadEntry ( dir->entry, &temp );
+    vertex = ( wVertex * ) wad->ReadEntry ( dir, &temp );
     noVertices = temp / sizeof ( wVertex );
 
-    dir = myList->FindWAD ( "SEGS", start, end );
+    dir = wad->FindDir ( "SECTORS", start, end );
     if ( dir == NULL ) return false;
-    segs = ( wSegs * ) dir->wad->ReadEntry ( dir->entry, &temp );
-    noSegs = temp / sizeof ( wSegs );
-
-    dir = myList->FindWAD ( "SSECTORS", start, end );
-    if ( dir == NULL ) return false;
-    subSector = ( wSSector * ) dir->wad->ReadEntry ( dir->entry, &temp );
-    noSubSectors = temp / sizeof ( wSSector );
-
-    dir = myList->FindWAD ( "NODES", start, end );
-    if ( dir == NULL ) return false;
-    node = ( wNode * ) dir->wad->ReadEntry ( dir->entry, &temp );
-    noNodes = temp / sizeof ( wNode );
-
-    dir = myList->FindWAD ( "SECTORS", start, end );
-    if ( dir == NULL ) return false;
-    sector = ( wSector * ) dir->wad->ReadEntry ( dir->entry, &temp );
+    sector = ( wSector * ) wad->ReadEntry ( dir, &temp );
     noSectors = temp / sizeof ( wSector );
 
-    dir = myList->FindWAD ( "REJECT", start, end );
+    dir = wad->FindDir ( "SEGS", start, end );
     if ( dir != NULL ) {
-        reject = ( wReject * ) dir->wad->ReadEntry ( dir->entry, &temp );
+        segs = ( wSegs * ) wad->ReadEntry ( dir, &temp );
+        noSegs = temp / sizeof ( wSegs );
+    }
+
+    dir = wad->FindDir ( "SSECTORS", start, end );
+    if ( dir != NULL ) {
+        subSector = ( wSSector * ) wad->ReadEntry ( dir, &temp );
+        noSubSectors = temp / sizeof ( wSSector );
+    }
+
+    dir = wad->FindDir ( "NODES", start, end );
+    if ( dir != NULL ) {
+        node = ( wNode * ) wad->ReadEntry ( dir, &temp );
+        noNodes = temp / sizeof ( wNode );
+    }
+
+    dir = wad->FindDir ( "REJECT", start, end );
+    if ( dir != NULL ) {
+        reject = ( wReject * ) wad->ReadEntry ( dir, &temp );
         rejectSize = temp;
     }
 
-    dir = myList->FindWAD ( "BLOCKMAP", start, end );
+    dir = wad->FindDir ( "BLOCKMAP", start, end );
     if ( dir != NULL ) {
-        blockMap = ( wBlockMap * ) dir->wad->ReadEntry ( dir->entry, &temp );
+        blockMap = ( wBlockMap * ) wad->ReadEntry ( dir, &temp );
         blockMapSize = temp;
     }
 
@@ -621,13 +630,14 @@ int DoomLevel::Load ()
 
 void DoomLevel::LoadHexenInfo ()
 {
+    const wadDirEntry *dir = wad->FindDir ( "MAPINFO" );
+    if ( dir == NULL ) return;
+
     int level;
     sscanf ( name, "MAP%02d", &level );
 
     ULONG Size;
-    const wadListDirEntry *wadEntry;
-    if (( wadEntry = myList->FindWAD ( "MAPINFO" )) == NULL ) return;
-    char *buffer = ( char * ) wadEntry->wad->ReadEntry ( wadEntry->entry, &Size, true );
+    char *buffer = ( char * ) wad->ReadEntry ( dir, &Size, true );
     char *ptr = buffer;
 
     if ( title ) free (( char * ) title );
@@ -665,8 +675,10 @@ void DoomLevel::LoadHexenInfo ()
         }
     }
 
-    if (( wadEntry = myList->FindWAD ( "SNDINFO" )) == NULL ) return;
-    buffer = ( char * ) wadEntry->wad->ReadEntry ( wadEntry->entry, &Size, true );
+    dir = wad->FindDir ( "SNDINFO" );
+    if ( dir == NULL ) return;
+
+    buffer = ( char * ) wad->ReadEntry ( dir, &Size, true );
     ptr = buffer;
 
     do {
@@ -717,63 +729,63 @@ void DoomLevel::AddToWAD ( WAD *wad )
 #endif
 
     if ( newFormat ) {
-        const wadListDirEntry *dir;
-        const wadListDirEntry *start = myList->FindWAD ( Name ());
-        const wadListDirEntry *end = start + 11;
-        dir = myList->FindWAD ( "BEHAVIOR", start, end );
+        const wadDirEntry *dir;
+        const wadDirEntry *start = wad->FindDir ( Name ());
+        const wadDirEntry *end = start + 11;
+        dir = wad->FindDir ( "BEHAVIOR", start, end );
         if ( dir != NULL ) {
             ULONG size;
-            void *ptr = dir->wad->ReadEntry ( dir->entry, &size );
+            void *ptr = wad->ReadEntry ( dir, &size );
             wad->InsertAfter (( const wLumpName * ) "BEHAVIOR", size, ptr, true );
         }
     }
 }
 
-bool DoomLevel::SaveThings ( const wadListDirEntry *&start, const wadListDirEntry *end )
+bool DoomLevel::SaveThings ( const wadDirEntry *start, const wadDirEntry *end )
 {
     bool changed;
-    const wadListDirEntry *dir = myList->FindWAD ( "THINGS", start, end );
+    const wadDirEntry *dir = wad->FindDir ( "THINGS", start, end );
     if ( rawThing ) delete rawThing;
     if ( newFormat ) {
         rawThing = new wThing2 [ noThings ];
         ConvertThingToRaw2 ( noThings, thing, ( wThing2 * ) rawThing );
-        changed = dir->wad->WriteEntry ( dir->entry, noThings * sizeof ( wThing2 ), rawThing, false );
+        changed = wad->WriteEntry ( dir, noThings * sizeof ( wThing2 ), rawThing, false );
     } else {
         rawThing = new wThing1 [ noThings ];
         ConvertThingToRaw1 ( noThings, thing, ( wThing1 * ) rawThing );
-        changed = dir->wad->WriteEntry ( dir->entry, noThings * sizeof ( wThing1 ), rawThing, false );
+        changed = wad->WriteEntry ( dir, noThings * sizeof ( wThing1 ), rawThing, false );
     }
     return changed;
 }
 
-bool DoomLevel::SaveLineDefs ( const wadListDirEntry *&start, const wadListDirEntry *end )
+bool DoomLevel::SaveLineDefs ( const wadDirEntry *start, const wadDirEntry *end )
 {
     bool changed;
-    const wadListDirEntry *dir = myList->FindWAD ( "LINEDEFS", start, end );
+    const wadDirEntry *dir = wad->FindDir ( "LINEDEFS", start, end );
     if ( rawLineDef ) delete rawLineDef;
     if ( newFormat ) {
         rawLineDef = new wLineDef2 [ noLineDefs ];
         ConvertLineDefToRaw2 ( noLineDefs, lineDef, ( wLineDef2 * ) rawLineDef );
-        changed = dir->wad->WriteEntry ( dir->entry, noLineDefs * sizeof ( wLineDef2 ), rawLineDef, false );
+        changed = wad->WriteEntry ( dir, noLineDefs * sizeof ( wLineDef2 ), rawLineDef, false );
     } else {
         rawLineDef = new wLineDef1 [ noLineDefs ];
         ConvertLineDefToRaw1 ( noLineDefs, lineDef, ( wLineDef1 * ) rawLineDef );
-        changed = dir->wad->WriteEntry ( dir->entry, noLineDefs * sizeof ( wLineDef1 ), rawLineDef, false );
+        changed = wad->WriteEntry ( dir, noLineDefs * sizeof ( wLineDef1 ), rawLineDef, false );
     }
     return changed;
 }
 
 bool DoomLevel::UpdateWAD ()
 {
-    if (( myList == NULL ) || ( ! modified )) return false;
-
-    const wadListDirEntry *start = myList->FindWAD ( Name ());
-    const wadListDirEntry *end = start + min ( 10, myList->DirSize () - 1 );
+    if (( wad == NULL ) || ( ! modified )) return false;
+    
+    const wadDirEntry *start = wad->FindDir ( Name ());
+    const wadDirEntry *end = start + min ( 10, wad->DirSize () - 1 );
 
     if ( start == NULL ) return false;
     start += 1;
 
-    const wadListDirEntry *dir;
+    const wadDirEntry *dir;
 
     bool changed = false;
 
@@ -787,82 +799,92 @@ bool DoomLevel::UpdateWAD ()
     }
     if ( sideDefsChanged ) {
         sideDefsChanged = false;
-        dir = myList->FindWAD ( "SIDEDEFS", start, end );
+        dir = wad->FindDir ( "SIDEDEFS", start, end );
         if ( dir == NULL ) {
             fprintf ( stderr, "Invalid map - no SIDEDEFS!\n" );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, noSideDefs * sizeof ( wSideDef ), sideDef, false );
+            changed |= wad->WriteEntry ( dir, noSideDefs * sizeof ( wSideDef ), sideDef, false );
         }
     }
     if ( verticesChanged ) {
         verticesChanged = false;
-        dir = myList->FindWAD ( "VERTEXES", start, end );
+        dir = wad->FindDir ( "VERTEXES", start, end );
         if ( dir == NULL ) {
             fprintf ( stderr, "Invalid map - no SIDEDEFS!\n" );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, noVertices * sizeof ( wVertex ), vertex, false );
+            changed |= wad->WriteEntry ( dir, noVertices * sizeof ( wVertex ), vertex, false );
         }
     }
     if ( segsChanged ) {
         segsChanged = false;
-        dir = myList->FindWAD ( "SEGS", start, end );
+        dir = wad->FindDir ( "SEGS", start, end );
         if ( dir == NULL ) {
-            const wadListDirEntry *last = myList->FindWAD ( "VERTEXES", start, end );
-            changed |= last->wad->InsertAfter (( const wLumpName * ) "SEGS", noSegs * sizeof ( wSegs ), segs, false, last->entry );
+            const wadDirEntry *last = wad->FindDir ( "VERTEXES", start, end );
+            changed |= wad->InsertAfter (( const wLumpName * ) "SEGS", noSegs * sizeof ( wSegs ), segs, false, last );
+            start = wad->FindDir ( Name ());
+            end = start + min ( 10, wad->DirSize () - 1 );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, noSegs * sizeof ( wSegs ), segs, false );
+            changed |= wad->WriteEntry ( dir, noSegs * sizeof ( wSegs ), segs, false );
         }
     }
     if ( subSectorsChanged ) {
         subSectorsChanged = false;
-        dir = myList->FindWAD ( "SSECTORS", start, end );
+        dir = wad->FindDir ( "SSECTORS", start, end );
         if ( dir == NULL ) {
-            const wadListDirEntry *last = myList->FindWAD ( "SEGS", start, end );
-            changed |= last->wad->InsertAfter (( const wLumpName * ) "SSECTORS", noSubSectors * sizeof ( wSSector ), subSector, false, last->entry );
+            const wadDirEntry *last = wad->FindDir ( "SEGS", start, end );
+            changed |= wad->InsertAfter (( const wLumpName * ) "SSECTORS", noSubSectors * sizeof ( wSSector ), subSector, false, last );
+            start = wad->FindDir ( Name ());
+            end = start + min ( 10, wad->DirSize () - 1 );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, noSubSectors * sizeof ( wSSector ), subSector, false );
+            changed |= wad->WriteEntry ( dir, noSubSectors * sizeof ( wSSector ), subSector, false );
         }
     }
     if ( nodesChanged ) {
         nodesChanged = false;
-        dir = myList->FindWAD ( "NODES", start, end );
+        dir = wad->FindDir ( "NODES", start, end );
         if ( dir == NULL ) {
-            const wadListDirEntry *last = myList->FindWAD ( "SSECTORS", start, end );
-            changed |= last->wad->InsertAfter (( const wLumpName * ) "NODES", noNodes * sizeof ( wNode ), node, false, last->entry );
+            const wadDirEntry *last = wad->FindDir ( "SSECTORS", start, end );
+            changed |= wad->InsertAfter (( const wLumpName * ) "NODES", noNodes * sizeof ( wNode ), node, false, last );
+            start = wad->FindDir ( Name ());
+            end = start + min ( 10, wad->DirSize () - 1 );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, noNodes * sizeof ( wNode ), node, false );
+            changed |= wad->WriteEntry ( dir, noNodes * sizeof ( wNode ), node, false );
         }
     }
     if ( sectorsChanged ) {
         sectorsChanged = false;
-        dir = myList->FindWAD ( "SECTORS", start, end );
+        dir = wad->FindDir ( "SECTORS", start, end );
         if ( dir == NULL ) {
-            const wadListDirEntry *last = myList->FindWAD ( "NODES", start, end );
-            changed |= last->wad->InsertAfter (( const wLumpName * ) "SECTORS", noSectors * sizeof ( wSector ), sector, false, last->entry );
+            const wadDirEntry *last = wad->FindDir ( "NODES", start, end );
+            changed |= wad->InsertAfter (( const wLumpName * ) "SECTORS", noSectors * sizeof ( wSector ), sector, false, last );
+            start = wad->FindDir ( Name ());
+            end = start + min ( 10, wad->DirSize () - 1 );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, noSectors * sizeof ( wSector ), sector, false );
+            changed |= wad->WriteEntry ( dir, noSectors * sizeof ( wSector ), sector, false );
         }
     }
 
     if ( rejectChanged ) {
         rejectChanged = false;
-        dir = myList->FindWAD ( "REJECT", start, end );
+        dir = wad->FindDir ( "REJECT", start, end );
         if ( dir == NULL ) {
-            const wadListDirEntry *last = myList->FindWAD ( "SECTORS", start, end );
-            changed |= last->wad->InsertAfter (( const wLumpName * ) "REJECT", rejectSize, reject, false, last->entry );
+            const wadDirEntry *last = wad->FindDir ( "SECTORS", start, end );
+            changed |= wad->InsertAfter (( const wLumpName * ) "REJECT", rejectSize, reject, false, last );
+            start = wad->FindDir ( Name ());
+            end = start + min ( 10, wad->DirSize () - 1 );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, rejectSize, reject, false );
+            changed |= wad->WriteEntry ( dir, rejectSize, reject, false );
         }
     }
 
     if ( blockMapChanged ) {
         blockMapChanged = false;
-        dir = myList->FindWAD ( "BLOCKMAP", start, end );
+        dir = wad->FindDir ( "BLOCKMAP", start, end );
         if ( dir == NULL ) {
-            const wadListDirEntry *last = myList->FindWAD ( "REJECT", start, end );
-            changed |= last->wad->InsertAfter (( const wLumpName * ) "BLOCKMAP", blockMapSize, blockMap, false, last->entry );
+            const wadDirEntry *last = wad->FindDir ( "REJECT", start, end );
+            changed |= wad->InsertAfter (( const wLumpName * ) "BLOCKMAP", blockMapSize, blockMap, false, last );
         } else {
-            changed |= dir->wad->WriteEntry ( dir->entry, blockMapSize, blockMap, false );
+            changed |= wad->WriteEntry ( dir, blockMapSize, blockMap, false );
         }
     }
 
@@ -998,7 +1020,7 @@ void DoomLevel::NewNodes ( int newCount, wNode *newData )
 void DoomLevel::NewReject ( int newSize, wReject *newData, bool saveBits )
 {
     int mask = ( 0xFF00 >> ( rejectSize * 8 - noSectors * noSectors )) & 0xFF;
-    int maskData = (( UCHAR * ) reject ) [ rejectSize -1 ] & mask;
+    int maskData = ( reject != NULL ) ? (( UCHAR * ) reject ) [ rejectSize -1 ] & mask : 0;
 
     if ( reject && newData && ( newSize == rejectSize ) &&
          ( memcmp ( newData, reject, newSize - 1 ) == 0 )) {

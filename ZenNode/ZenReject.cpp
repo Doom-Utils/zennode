@@ -143,8 +143,10 @@ extern void Status ( char * );
 
 bool FeaturesDetected ( DoomLevel *level )
 {
-    int noSectors = level->SectorCount ();
     char *ptr = ( char * ) level->GetReject ();
+    if ( ptr == NULL ) return false;
+
+    int noSectors = level->SectorCount ();
     int bits = 8;
     int data = *ptr++;
     bool **table = new bool * [ noSectors ];

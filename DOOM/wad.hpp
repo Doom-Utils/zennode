@@ -117,6 +117,8 @@ struct wadDirInfo {
     eLumpType type;
 };
 
+class wadList;
+
 class wadFilter {
 public:
     virtual const char *getFileSpec () const = 0;
@@ -130,6 +132,7 @@ class WAD {
 
     char        *wadName;
     FILE        *wadFile;
+    wadList     *list;
 
     bool      valid;
     bool      registered;
@@ -166,6 +169,8 @@ public:
 
     WAD ( const char * );
    ~WAD ();
+
+    void SetList ( wadList * );
 
     static bool isMap ( const char * );
     static bool AddFilter ( wadFilter * );
@@ -266,6 +271,7 @@ public:
     bool Add ( WAD * );
     bool Remove ( WAD * );
     void Clear ();
+    void UpdateDirectory ();
 
     int   wadCount () const;
     ULONG FileSize () const;

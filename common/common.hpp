@@ -55,6 +55,11 @@ typedef unsigned long  ULONG;
 
 #endif
 
+// In case endian.h hasn't defined one of these, define one
+#if ! defined ( LITTLE_ENDIAN ) && ! defined ( BIG_ENDIAN )
+    #define LITTLE_ENDIAN
+#endif
+
 typedef int (*QSORT_FUNC) ( const void *, const void * );
 
 #ifdef max

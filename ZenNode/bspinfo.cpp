@@ -342,7 +342,8 @@ int main ( int argc, char *argv[] )
 
         do {
 
-            DoomLevel *curLevel = new DoomLevel ( levelNames [ noLevels ], myList );
+            const wadListDirEntry *dir = myList->FindWAD ( levelNames [ noLevels ]);
+            DoomLevel *curLevel = new DoomLevel ( levelNames [ noLevels ], dir->wad );
             printf ( "%8.8s:  ", levelNames [ noLevels++ ]);
             AnalyzeBSP ( curLevel );
             printf ( "\n" );

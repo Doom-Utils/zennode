@@ -1,10 +1,26 @@
 //----------------------------------------------------------------------------
 //
-// File:	Logger.hpp
-// Name:	Error Logger object header
-// Programmer:	Marc Rousseau			 
+// File:	logger.hpp
 // Date:	15 April 1998
-// Description:
+// Programmer:	Marc Rousseau			 
+//
+// Description: Error Logger object header
+//
+// Copyright (c) 2000 Marc Rousseau, All Rights Reserved.
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307, USA.
 //
 // Revision History:
 //
@@ -135,7 +151,6 @@ enum eLOG_TYPE {
     LOG_TYPE_MAX
 };  
 
-#pragma option -a1
 struct sLogEntry {
     ULONG       Type;
     ULONG       FileIndex;
@@ -144,9 +159,6 @@ struct sLogEntry {
     __int64     Time;
     char        Text [ 256 ];
 };
-#pragma option -a.
-
-#pragma option -pr
 
 class dbgString {
 
@@ -172,6 +184,7 @@ public:
     dbgString &operator << ( unsigned long );
     dbgString &operator << ( __int64 );
     dbgString &operator << ( unsigned __int64 );
+    dbgString &operator << ( double );
     dbgString &operator << ( void * );
     dbgString &operator << ( dbgString &(*f) ( dbgString & ));
 
@@ -183,17 +196,17 @@ dbgString &dec ( dbgString & );
 extern "C" {
 
     // Client Functions
-    dbgString  &dbg_Stream ();
-    ULONG       dbg_RegisterFile ( const char * );
-    void        dbg_Assert ( int, int, const char * );
-    void        dbg_Record ( int, int, int, const char * );
+    dbgString & __cdecl dbg_Stream ();
+    ULONG __cdecl dbg_RegisterFile ( const char * );
+    void  __cdecl dbg_Assert ( int, int, const char * );
+    void  __cdecl dbg_Record ( int, int, int, const char * );
 
     // Server Functions
-    bool        dbg_StartServer ();
-    bool        dbg_StopServer ();
-    sLogEntry  *dbg_GetRecord ();
-    const char *dbg_GetFileName ( ULONG );
-    const char *dbg_GetModuleName ( ULONG );
+    bool        __cdecl dbg_StartServer ();
+    bool        __cdecl dbg_StopServer ();
+    sLogEntry  *__cdecl dbg_GetRecord ();
+    const char *__cdecl dbg_GetFileName ( ULONG );
+    const char *__cdecl dbg_GetModuleName ( ULONG );
 
 };
 
