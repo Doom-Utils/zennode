@@ -68,7 +68,7 @@
 
 DBG_REGISTER ( __FILE__ );
 
-#define VERSION                 "1.2.0"
+#define VERSION                 "1.2.1"
 
 const char BANNER []            = "ZenNode Version " VERSION " (c) 1994-2004 Marc Rousseau";
 const char CONFIG_FILENAME []   = "ZenNode.cfg";
@@ -724,12 +724,16 @@ bool ProcessLevel ( char *name, wadList *myList, UINT32 *ellapsed )
         Status ( "" );
         GotoXY ( startX, startY );
 
-        cprintf ( "BLOCKMAP - %5d/%-5d ", newSize, oldSize );
-        if ( oldSize ) cprintf ( "(%3d%%)", ( int ) ( 100.0 * newSize / oldSize + 0.5 ));
-        else cprintf ( "(****)" );
-        cprintf ( "   Compressed: " );
-        if ( newSize + saved ) cprintf ( "%3d%%", ( int ) ( 100.0 * newSize / ( newSize + saved ) + 0.5 ));
-        else cprintf ( "(****)" );
+        if ( saved >= 0 ) {
+            cprintf ( "BLOCKMAP - %5d/%-5d ", newSize, oldSize );
+            if ( oldSize ) cprintf ( "(%3d%%)", ( int ) ( 100.0 * newSize / oldSize + 0.5 ));
+            else cprintf ( "(****)" );
+            cprintf ( "   Compressed: " );
+            if ( newSize + saved ) cprintf ( "%3d%%", ( int ) ( 100.0 * newSize / ( newSize + saved ) + 0.5 ));
+            else cprintf ( "(****)" );
+        } else {
+            cprintf ( "BLOCKMAP - * Level too big to create valid BLOCKMAP *" );
+        }
 
         PrintTime ( blockTime );
         cprintf ( "\r\n" );

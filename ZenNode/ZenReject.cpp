@@ -154,7 +154,7 @@ static sGraphTable    graphTable;
 static int            loRow;
 static int            hiRow;
 
-static wBlockMap             *blockMap;
+static sBlockMap             *blockMap;
 static sBlockMapBounds       *blockMapBounds;
 static sBlockMapArrayEntry ***blockMapArray;
 
@@ -813,14 +813,8 @@ void PrepareBLOCKMAP ( DoomLevel *level )
 {
     FUNCTION_ENTRY ( NULL, "PrepareBLOCKMAP", true );
 
-    blockMap = ( wBlockMap * ) level->GetBlockMap ();
-    if ( blockMap == NULL ) {
-        sBlockMapOptions options = { true, true };
-        CreateBLOCKMAP ( level, options );
-        blockMap = ( wBlockMap * ) level->GetBlockMap ();
-    }
+    blockMap = GenerateBLOCKMAP ( level );
 
-    UINT16 *offset = ( UINT16 * ) ( blockMap + 1 );
     blockMapArray  = new sBlockMapArrayEntry ** [ blockMap->noRows ];
     blockMapBounds = new sBlockMapBounds [ blockMap->noRows ];
     for ( int index = 0, row = 0; row < blockMap->noRows; row++ ) {
@@ -828,15 +822,13 @@ void PrepareBLOCKMAP ( DoomLevel *level )
         blockMapBounds [ row ].lo = blockMap->noColumns;
         blockMapBounds [ row ].hi = -1;
         for ( int col = 0; col < blockMap->noColumns; col++ ) {
-            UINT16 *ptr = ( UINT16 * ) blockMap + offset [index++];
-            int i = 1;
-            while ( ptr [i] != ( UINT16 ) -1 ) i++;
             sBlockMapArrayEntry *newPtr = NULL;
-            if ( i > 1 ) {
+            sBlockList *blockList = &blockMap->data [index++];
+            if ( blockList->count > 0 ) {
                 int j = 0;
-                newPtr = new sBlockMapArrayEntry [i];
-                for ( i = 1; ptr [i] != ( UINT16 ) -1; i++ ) {
-                    int line = ptr [i];
+                newPtr = new sBlockMapArrayEntry [blockList->count+1];
+                for ( int i = 0; i < blockList->count; i++ ) {
+                    int line = blockList->line [i];
                     if ( indexToSolid [ line ] != NULL ) {
                         newPtr [j].available = &checkLine [ line ];
                         newPtr [j].line      = indexToSolid [ line ];
@@ -853,6 +845,14 @@ void PrepareBLOCKMAP ( DoomLevel *level )
             blockMapArray [ row ][ col ] = newPtr;
         }
     }
+
+    int totalSize = blockMap->noColumns * blockMap->noRows;
+
+    for ( int i = 0; i < totalSize; i++ ) {
+        if ( blockMap->data [i].line ) free ( blockMap->data [i].line );
+    }
+
+    delete [] blockMap->data;
 }
 
 void CleanUpBLOCKMAP ()
@@ -867,6 +867,7 @@ void CleanUpBLOCKMAP ()
         delete [] blockMapArray [ row ];
     }
     delete [] blockMapArray;
+    delete blockMap;
 }
 
 //

@@ -35,13 +35,6 @@
 #include "ZenNode.hpp"
 #include "console.hpp"
 
-struct sBlockList {
-    int     firstIndex;			// Index of 1st blockList element matching this one
-    int     offset;
-    int     count;
-    int    *line;
-};
-
 void AddLineDef ( sBlockList *block, int line )
 {
     if (( block->count % 16 ) == 0 ) {
@@ -51,17 +44,18 @@ void AddLineDef ( sBlockList *block, int line )
     block->line [ block->count++ ] = line;
 }
 
-int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
+sBlockMap *GenerateBLOCKMAP ( DoomLevel *level )
 {
     Status ( "Creating BLOCKMAP ... " );
 
-    const wVertex *vertex = level->GetVertices ();
+    const wVertex *vertex   = level->GetVertices ();
     const wLineDef *lineDef = level->GetLineDefs ();
+
     int xLeft, xRight, yTop, yBottom;
     xRight = xLeft = vertex [0].x;
     yTop = yBottom = vertex [0].y;
-    int i;
-    for ( i = 1; i < level->VertexCount (); i++ ) {
+    
+    for ( int i = 1; i < level->VertexCount (); i++ ) {
         if ( vertex [i].x < xLeft ) xLeft = vertex [i].x;
         if ( vertex [i].x > xRight ) xRight = vertex [i].x;
         if ( vertex [i].y < yBottom ) yBottom = vertex [i].y;
@@ -76,14 +70,14 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
     int totalSize = noCols * noRows;
 
     sBlockList *blockList = new sBlockList [ totalSize ];
-    for ( i = 0; i < totalSize; i++ ) {
+    for ( int i = 0; i < totalSize; i++ ) {
         blockList [i].firstIndex = i;
-        blockList [i].offset = 0;
-        blockList [i].count = 0;
-        blockList [i].line = NULL;
+        blockList [i].offset     = 0;
+        blockList [i].count      = 0;
+        blockList [i].line       = NULL;
     }
 
-    for ( i = 0; i < level->LineDefCount (); i++ ) {
+    for ( int i = 0; i < level->LineDefCount (); i++ ) {
 
         const wVertex *vertS = &vertex [ lineDef [i].start ];
         const wVertex *vertE = &vertex [ lineDef [i].end ];
@@ -99,16 +93,14 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
         int index = startX + startY * noCols;
 
         if ( startX == endX ) {
+            AddLineDef ( &blockList [ index ], i );
             if ( startY != endY ) {	// vertical line
-                AddLineDef ( &blockList [ index ], i );
                 int dy = (( endY - startY ) > 0 ) ? 1 : -1;
                 do {
                     startY += dy;
-                    index += dy * noCols;
+                    index  += dy * noCols;
                     AddLineDef ( &blockList [ index ], i );
                 } while ( startY != endY );
-            } else {
-                AddLineDef ( &blockList [ index ], i );
             }
         } else {
             if ( startY == endY ) {	// horizontal line
@@ -116,7 +108,7 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
                 int dx = (( endX - startX ) > 0 ) ? 1 : -1;
                 do {
                     startX += dx;
-                    index += dx;
+                    index  += dx;
                     AddLineDef ( &blockList [ index ], i );
                 } while ( startX != endX );
             } else {			// diagonal line
@@ -159,12 +151,30 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
         }
     }
 
+    sBlockMap *blockMap = new sBlockMap;
+    blockMap->xOrigin   = xLeft;
+    blockMap->yOrigin   = yBottom;
+    blockMap->noColumns = noCols;
+    blockMap->noRows    = noRows;
+    blockMap->data      = blockList;
+
+    return blockMap;
+}
+
+int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
+{
+    // Generate the data
+    sBlockMap *blockMap = GenerateBLOCKMAP ( level );
+
     Status ( "Packing BLOCKMAP ... " );
 
+    sBlockList *blockList = blockMap->data;
+
     // Count unique blockList elements
+    int totalSize = blockMap->noColumns * blockMap->noRows;
     int blockListSize = 0, savings = 0;
     int zeroIndex = -1;
-    for ( i = 0; i < totalSize; i++ ) {
+    for ( int i = 0; i < totalSize; i++ ) {
         if ( options.Compress ) {
             if ( blockList [i].count == 0 ) {
                 if ( zeroIndex != -1 ) {
@@ -175,8 +185,8 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
                 zeroIndex = i;
             } else {
                 // Only go back to the beginning of the previous row
-                int rowStart = ( i / noCols ) * noCols;
-                int lastStart = rowStart ? rowStart - noCols : 0;
+                int rowStart = ( i / blockMap->noColumns ) * blockMap->noColumns;
+                int lastStart = rowStart ? rowStart - blockMap->noColumns : 0;
                 int index = i - 1;
                 while ( index >= lastStart ) {
                     int count = blockList[i].count;
@@ -196,40 +206,53 @@ int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
     }
 
     Status ( "Saving BLOCKMAP ... " );
+
     int blockSize = sizeof ( wBlockMap ) +
                     totalSize * sizeof ( INT16 ) +
                     blockListSize * sizeof ( INT16 );
     char *start = new char [ blockSize ];
-    wBlockMap *blockMap = ( wBlockMap * ) start;
-    blockMap->xOrigin   = ( INT16 ) xLeft;
-    blockMap->yOrigin   = ( INT16 ) yBottom;
-    blockMap->noColumns = ( UINT16 ) noCols;
-    blockMap->noRows    = ( UINT16 ) noRows;
+    wBlockMap *map = ( wBlockMap * ) start;
+    map->xOrigin   = ( INT16 ) blockMap->xOrigin;
+    map->yOrigin   = ( INT16 ) blockMap->yOrigin;
+    map->noColumns = ( UINT16 ) blockMap->noColumns;
+    map->noRows    = ( UINT16 ) blockMap->noRows;
 
     // Fill in data & offsets
-    INT16 *offset = ( INT16 * ) ( blockMap + 1 );
-    INT16 *data   = offset + totalSize;
-    for ( i = 0; i < totalSize; i++ ) {
+    UINT16 *offset = ( UINT16 * ) ( map + 1 );
+    UINT16 *data   = offset + totalSize;
+    for ( int i = 0; i < totalSize; i++ ) {
         sBlockList *block = &blockList [i];
         if ( block->firstIndex == i ) {
-            block->offset = data - ( INT16 * ) start;
+            block->offset = data - ( UINT16 * ) start;
             *data++ = 0;
             for ( int x = 0; x < block->count; x++ ) {
-                *data++ = ( INT16 ) block->line [x];
+                *data++ = ( UINT16 ) block->line [x];
             }
-            *data++ = -1;
+            *data++ = ( UINT16 ) -1;
         } else {
             block->offset = blockList [ block->firstIndex ].offset;
         }
     }
 
-    for ( i = 0; i < totalSize; i++ ) {
-        offset [i] = ( INT16 ) blockList [i].offset;
+    bool errors = false;
+
+    for ( int i = 0; i < totalSize; i++ ) {
+        if ( blockList [i].offset > 0xFFFF ) {
+            errors = true;
+        }
+        offset [i] = ( UINT16 ) blockList [i].offset;
         if ( blockList [i].line ) free ( blockList [i].line );
     }
-    delete [] blockList;
 
-    level->NewBlockMap ( blockSize, blockMap );
+    delete [] blockList;
+    delete blockMap;
+
+    if ( errors == true ) {
+        delete [] start;
+        return -1;
+    }
+
+    level->NewBlockMap ( blockSize, map );
 
     return savings * sizeof ( INT16 );
 }

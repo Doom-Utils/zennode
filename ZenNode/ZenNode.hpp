@@ -48,8 +48,23 @@ struct sNodeOptions {
     bool  ReduceLineDefs;
 };
 
+struct sBlockList {
+    int     firstIndex;			// Index of 1st blockList element matching this one
+    int     offset;
+    int     count;
+    int    *line;
+};
+
+struct sBlockMap {
+    int         xOrigin;
+    int         yOrigin;
+    int         noColumns;
+    int         noRows;
+    sBlockList *data;
+};
+
 typedef unsigned short BAM;
-typedef long double REAL;	// Must have at least 50 significant bits
+typedef long double REAL;		// Must have at least 50 significant bits
 
 struct sVertex {
     double x;
@@ -212,8 +227,9 @@ bool ParseOptionRMB ( int, const char *, sRejectOptionRMB * );
 
 #endif
 
-extern void CreateNODES ( DoomLevel *level, sBSPOptions *options );
+extern sBlockMap *GenerateBLOCKMAP ( DoomLevel *level );
 extern int  CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options );
+extern void CreateNODES ( DoomLevel *level, sBSPOptions *options );
 extern bool CreateREJECT ( DoomLevel *level, const sRejectOptions &options );
 
 #endif
