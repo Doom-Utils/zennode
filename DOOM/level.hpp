@@ -175,55 +175,52 @@ struct wBlockMap {
 
 class DoomLevel {
 
-    WAD        *wad;
-    wLumpName	name;
-    bool        modified;
-    bool        valid;
-    bool        checked;
+    WAD        *m_Wad;
+    wLumpName	m_Name;
+    bool        m_Modified;
+    bool        m_Valid;
+    bool        m_Checked;
 
-    bool        newFormat;
-    const char *title;
-    const char *music;
-    int         cluster;
+    bool        m_NewFormat;
+    const char *m_Title;
+    const char *m_Music;
+    int         m_Cluster;
 
-    int		noThings;
-    int		noLineDefs;
-    int		noSideDefs;
-    int		noVertices;
-    int		noSectors;
+    int		m_NoThings;
+    int		m_NoLineDefs;
+    int		m_NoSideDefs;
+    int		m_NoVertices;
+    int		m_NoSectors;
+    int		m_NoSegs;
+    int		m_NoSubSectors;
+    int		m_NoNodes;
+    int		m_RejectSize;
+    int		m_BlockMapSize;
 
-    int		noSegs;
-    int		noSubSectors;
-    int		noNodes;
+    char       *m_RawThing;
+    char       *m_RawLineDef;
 
-    int		rejectSize;
-    int		blockMapSize;
+    bool        m_ThingsChanged;
+    bool        m_LineDefsChanged;
+    bool        m_SideDefsChanged;
+    bool        m_VerticesChanged;
+    bool        m_SectorsChanged;
+    bool        m_SegsChanged;
+    bool        m_SubSectorsChanged;
+    bool        m_NodesChanged;
+    bool        m_RejectChanged;
+    bool        m_BlockMapChanged;
 
-    char       *rawThing;
-    char       *rawLineDef;
-
-    bool        thingsChanged;
-    bool        lineDefsChanged;
-    bool        sideDefsChanged;
-    bool        verticesChanged;
-    bool        sectorsChanged;
-    bool        segsChanged;
-    bool        subSectorsChanged;
-    bool        nodesChanged;
-    bool        rejectChanged;
-    bool        blockMapChanged;
-
-    wThing     *thing;
-    wLineDef   *lineDef;
-    wSideDef   *sideDef;
-    wVertex    *vertex;
-    wSector    *sector;
-
-    wSegs      *segs;
-    wSSector   *subSector;
-    wNode      *node;
-    wReject    *reject;		// optional
-    wBlockMap  *blockMap;
+    wThing     *m_Thing;
+    wLineDef   *m_LineDef;
+    wSideDef   *m_SideDef;
+    wVertex    *m_Vertex;
+    wSector    *m_Sector;
+    wSegs      *m_Segs;
+    wSSector   *m_SubSector;
+    wNode      *m_Node;
+    wReject    *m_Reject;		// optional
+    wBlockMap  *m_BlockMap;
 
     static void ConvertRaw1ToThing ( int, wThing1 *, wThing * );
     static void ConvertRaw2ToThing ( int, wThing2 *, wThing * );
@@ -257,34 +254,34 @@ public:
     DoomLevel ( const char *, WAD *, bool = true );
     ~DoomLevel ();
 
-    const WAD *GetWAD () const			{ return wad; }
+    const WAD *GetWAD () const			{ return m_Wad; }
 
-    const char *Name () const			{ return name; }
-    const char *Title () const			{ return title ? title : name; }
-    const char *Music () const			{ return music ? music : NULL; }
-    int MapCluster () const			{ return cluster; }
+    const char *Name () const			{ return m_Name; }
+    const char *Title () const			{ return m_Title ? m_Title : m_Name; }
+    const char *Music () const			{ return m_Music ? m_Music : NULL; }
+    int MapCluster () const			{ return m_Cluster; }
 
-    int ThingCount () const			{ return noThings; }
-    int LineDefCount () const			{ return noLineDefs; }
-    int SideDefCount () const			{ return noSideDefs; }
-    int VertexCount () const			{ return noVertices; }
-    int SectorCount () const			{ return noSectors; }
-    int SegCount () const			{ return noSegs; }
-    int SubSectorCount () const			{ return noSubSectors; }
-    int NodeCount () const			{ return noNodes; }
-    int RejectSize () const			{ return rejectSize; }
-    int BlockMapSize () const			{ return blockMapSize; }
+    int ThingCount () const			{ return m_NoThings; }
+    int LineDefCount () const			{ return m_NoLineDefs; }
+    int SideDefCount () const			{ return m_NoSideDefs; }
+    int VertexCount () const			{ return m_NoVertices; }
+    int SectorCount () const			{ return m_NoSectors; }
+    int SegCount () const			{ return m_NoSegs; }
+    int SubSectorCount () const			{ return m_NoSubSectors; }
+    int NodeCount () const			{ return m_NoNodes; }
+    int RejectSize () const			{ return m_RejectSize; }
+    int BlockMapSize () const			{ return m_BlockMapSize; }
 
-    const wThing	*GetThings () const	{ return thing; }
-    const wLineDef	*GetLineDefs () const	{ return lineDef; }
-    const wSideDef	*GetSideDefs () const	{ return sideDef; }
-    const wVertex	*GetVertices () const	{ return vertex; }
-    const wSector	*GetSectors () const	{ return sector; }
-    const wSegs		*GetSegs () const	{ return segs; }
-    const wSSector	*GetSubSectors () const	{ return subSector; }
-    const wNode		*GetNodes () const	{ return node; }
-    const wReject	*GetReject () const	{ return reject; }
-    const wBlockMap	*GetBlockMap () const	{ return blockMap; }
+    const wThing	*GetThings () const	{ return m_Thing; }
+    const wLineDef	*GetLineDefs () const	{ return m_LineDef; }
+    const wSideDef	*GetSideDefs () const	{ return m_SideDef; }
+    const wVertex	*GetVertices () const	{ return m_Vertex; }
+    const wSector	*GetSectors () const	{ return m_Sector; }
+    const wSegs		*GetSegs () const	{ return m_Segs; }
+    const wSSector	*GetSubSectors () const	{ return m_SubSector; }
+    const wNode		*GetNodes () const	{ return m_Node; }
+    const wReject	*GetReject () const	{ return m_Reject; }
+    const wBlockMap	*GetBlockMap () const	{ return m_BlockMap; }
 
     void NewThings ( int, wThing * );
     void NewLineDefs ( int, wLineDef * );
@@ -297,7 +294,7 @@ public:
     void NewReject ( int, wReject *, bool );
     void NewBlockMap ( int, wBlockMap * );
 
-    bool isValid ();
+    bool isValid ( bool );
     bool hasChanged () const;
 
     void TrimVertices ();

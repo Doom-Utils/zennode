@@ -97,7 +97,7 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
     }
 
     // See if the user requested specific levels
-    if ( WAD::isMap ( buffer )) {
+    if ( WAD::IsMap ( buffer )) {
         argIndex++;
         char *ptr = buffer;
         for ( EVER ) {
@@ -113,14 +113,14 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
             }
             ptr += length;
             if ( *ptr++ != '+' ) break;
-            if ( ! WAD::isMap ( ptr )) {
+            if ( ! WAD::IsMap ( ptr )) {
                 do {
                     char *end = ptr;
                     while ( *end && ( *end != '+' )) end++;
                     fprintf ( stderr, "  %*.*s is not a valid name for a level\n", end-ptr, end-ptr, ptr );
                     errors++;
                     ptr = end ? end+1 : NULL;
-                } while ( ptr && ! WAD::isMap ( ptr ));
+                } while ( ptr && ! WAD::IsMap ( ptr ));
                 if ( ptr == NULL ) break;
             }
         }
@@ -128,7 +128,7 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
         int size = list->DirSize ();
         const wadListDirEntry *dir = list->GetDir ( 0 );
         for ( int i = 0; i < size; i++ ) {
-            if ( dir->wad->isMap ( dir->entry->name )) {
+            if ( dir->wad->IsMap ( dir->entry->name )) {
                 if ( index == MAX_LEVELS ) {
                     fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name );
                     errors++;
@@ -182,7 +182,7 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
             fprintf ( stderr, msg, wadName );
             delete wad;
         } else {
-            if ( ! myList->isEmpty ()) {
+            if ( ! myList->IsEmpty ()) {
                 printf ( "Merging: %s with %s\n", wadName, listNames );
                 *wadFileName++ = '+';
             }
@@ -321,7 +321,7 @@ int main ( int argc, char *argv[] )
 
         char wadFileName [ 256 ];
         wadList *myList = getInputFiles ( argv [argIndex++], wadFileName );
-        if ( myList->isEmpty ()) break;
+        if ( myList->IsEmpty ()) break;
         printf ( "Analyzing: %s\n\n", wadFileName );
 
         char levelNames [MAX_LEVELS+1][MAX_LUMP_NAME];

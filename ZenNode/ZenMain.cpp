@@ -69,8 +69,8 @@ DBG_REGISTER ( __FILE__ );
     LOG_FLAGS g_LogFlags;
 #endif
 
-#define VERSION		"1.0.6"
-#define BANNER          "ZenNode Version " VERSION " (c) 1994-2001 Marc Rousseau\r\n\r\n"
+#define VERSION		"1.0.7"
+#define BANNER          "ZenNode Version " VERSION " (c) 1994-2001 Marc Rousseau"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
 
@@ -109,8 +109,8 @@ void RestoreConsoleSettings ();
 #define DEFAULT_CHAR	'*'
 
 #define stricmp strcasecmp
-#define cprintf printf
 
+extern void cprintf ( char *, ... );
 extern char *strupr ( char *ptr );
 extern int getch ();
 extern bool kbhit ();
@@ -147,10 +147,11 @@ void printHelp ()
     fprintf ( stdout, "        q                   - Don't display progress bar\n" );
     fprintf ( stdout, "        u               %c   - Ensure all sub-sectors contain only 1 sector\n", DEFAULT_CHAR );
     fprintf ( stdout, "        i                   - Ignore non-visible lineDefs\n" );
-    fprintf ( stdout, "     -r[zfc]            %c - Rebuild REJECT resource\n", DEFAULT_CHAR );
+    fprintf ( stdout, "     -r[zfcg]           %c - Rebuild REJECT resource\n", DEFAULT_CHAR );
     fprintf ( stdout, "        z                   - Insert empty REJECT resource\n" );
-    fprintf ( stdout, "        f                   - Rebuild even if special effects are detected\n" );
-    fprintf ( stdout, "        c               %c   - Preprocess sectors by connectivity\n", DEFAULT_CHAR );
+    fprintf ( stdout, "        f                   - Rebuild even if REJECT effects are detected\n" );
+    fprintf ( stdout, "        c               %c   - Use child sector info to reduce LOS calculations\n", DEFAULT_CHAR );
+    fprintf ( stdout, "        g               %c   - Use graphs to reduce LOS calculations\n", DEFAULT_CHAR );
     fprintf ( stdout, "     -t                   - Don't write output file (test mode)\n" );
     fprintf ( stdout, "\n" );
     fprintf ( stdout, "     level - ExMy for DOOM/Heretic or MAPxx for DOOM II/HEXEN\n" );
@@ -215,7 +216,8 @@ bool parseREJECTArgs ( char *&ptr, bool setting )
         switch ( option ) {
             case 'Z' : config.Reject.Empty = setting;		break;
             case 'F' : config.Reject.Force = setting;		break;
-            case 'C' : config.Reject.Connectivity  = setting;	break;
+            case 'C' : config.Reject.FindChildren = setting;	break;
+            case 'G' : config.Reject.UseGraphs = setting;	break;
             default  : return true;
         }
         config.Reject.Rebuild = true;
@@ -337,10 +339,10 @@ int getLevels ( int argIndex, char *argv [], char names [][MAX_LUMP_NAME], wadLi
     char *ptr = strtok ( buffer, "+" );
 
     // See if the user requested specific levels
-    if ( WAD::isMap ( ptr )) {
+    if ( WAD::IsMap ( ptr )) {
         argIndex++;
         while ( ptr ) {
-            if ( WAD::isMap ( ptr )) {
+            if ( WAD::IsMap ( ptr )) {
                 if ( list->FindWAD ( ptr )) {
                     strcpy ( names [index++], ptr );
                 } else {
@@ -355,11 +357,14 @@ int getLevels ( int argIndex, char *argv [], char names [][MAX_LUMP_NAME], wadLi
         int size = list->DirSize ();
         const wadListDirEntry *dir = list->GetDir ( 0 );
         for ( int i = 0; i < size; i++ ) {
-            if ( dir->wad->isMap ( dir->entry->name )) {
-                if ( index == MAX_LEVELS ) {
-                    fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name, errors++ );
-                } else {
-                    memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
+            if ( dir->wad->IsMap ( dir->entry->name )) {
+                // Make sure it's really a level
+                if ( strcmp ( dir[1].entry->name, "THINGS" ) == 0 ) {
+                    if ( index == MAX_LEVELS ) {
+                        fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name, errors++ );
+                    } else {
+                        memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
+                    }
                 }
             }
             dir++;
@@ -428,7 +433,7 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
             fprintf ( stderr, msg, wadName );
             delete wad;
         } else {
-            if ( ! myList->isEmpty ()) {
+            if ( ! myList->IsEmpty ()) {
                 cprintf ( "Merging: %s with %s\r\n", wadName, listNames );
                 *wadFileName++ = '+';
             }
@@ -526,7 +531,7 @@ void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options
         char lineBuffer [ 256 ];
         fgets ( lineBuffer, sizeof ( lineBuffer ), optionFile );
         strtok ( lineBuffer, "\n\x1A]" );
-        if ( WAD::isMap ( lineBuffer )) {
+        if ( WAD::IsMap ( lineBuffer )) {
             if ( strcmp ( lineBuffer, curLevel->Name ()) == 0 ) {
                 foundMap = true;
             } else if ( foundMap ) {
@@ -648,8 +653,8 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 
     const wadListDirEntry *dir = myList->FindWAD ( name );
     DoomLevel *curLevel = new DoomLevel ( name, dir->wad );
-    if ( curLevel->isValid () == false ) {
-        Status ( "This level is not valid... " );
+    if ( curLevel->isValid ( ! config.Nodes.Rebuild ) == false ) {
+        cprintf ( "This level is not valid... " );
         cprintf ( "\r\n" );
         delete curLevel;
         return false;
@@ -739,11 +744,11 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
         if ( special == false ) {
             Status ( "" );
             GotoXY ( startX, startY );
-            cprintf ( "REJECT - Efficiency: %3ld.%1ld%%/%2ld.%1ld%%", efficiency / 10, efficiency % 10,
-                                                                 oldEfficiency / 10, oldEfficiency % 10 );
+            cprintf ( "REJECT - Efficiency: %3ld.%1ld%%/%2ld.%1ld%%  Sectors: %5d", efficiency / 10, efficiency % 10,
+                                                                 oldEfficiency / 10, oldEfficiency % 10, curLevel->SectorCount ());
             PrintTime ( rejectTime );
         } else {
-            Status ( "REJECT - Special effects detected - use -rf to force an update" );
+            cprintf ( "REJECT - Special effects detected - use -rf to force an update" );
         }
 
         cprintf ( "\r\n" );
@@ -761,7 +766,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
             MoveDown ( rows );
         }
     } else {
-        Status ( "Nothing to do here ... " );
+        cprintf ( "Nothing to do here ... " );
         cprintf ( "\r\n" );
     }
 
@@ -858,10 +863,12 @@ char *ConvertNumber ( ULONG value )
 int main ( int argc, char *argv [] )
 {
     FUNCTION_ENTRY ( NULL, "main", true );
+ 
+    SaveConsoleSettings ();
 
-    cprintf ( BANNER );
-    if ( ! isatty ( fileno ( stdout ))) fprintf ( stdout, BANNER );
-    if ( ! isatty ( fileno ( stderr ))) fprintf ( stderr, BANNER );
+    cprintf ( "%s\r\n\r\n", BANNER );
+    if ( ! isatty ( fileno ( stdout ))) fprintf ( stdout, "%s\n\n", BANNER );
+    if ( ! isatty ( fileno ( stderr ))) fprintf ( stderr, "%s\n\n", BANNER );
 
     if ( argc == 1 ) {
         printHelp ();
@@ -873,20 +880,19 @@ int main ( int argc, char *argv [] )
 
     config.Nodes.Rebuild        = true;
     config.Nodes.Method         = 1;
-    config.Nodes.Quiet          = false;
+    config.Nodes.Quiet          = isatty ( fileno ( stdout )) ? false : true;
     config.Nodes.Unique         = true;
     config.Nodes.ReduceLineDefs = false;
 
     config.Reject.Rebuild       = true;
     config.Reject.Empty         = false;
     config.Reject.Force         = false;
-    config.Reject.Connectivity  = true;
+    config.Reject.FindChildren  = true;
+    config.Reject.UseGraphs     = true;
 
     config.WriteWAD             = true;
 
     ReadConfigFile ( argv );
-
-    SaveConsoleSettings ();
 
     int argIndex = 1;
     int totalLevels = 0, totalTime = 0, totalUpdates = 0;
@@ -901,7 +907,7 @@ int main ( int argc, char *argv [] )
 
         char wadFileName [ 256 ];
         wadList *myList = getInputFiles ( argv [argIndex++], wadFileName );
-        if ( myList->isEmpty ()) break;
+        if ( myList->IsEmpty ()) break;
         cprintf ( "Working on: %s\r\n\n", wadFileName );
 
         TRACE ( "Processing " << wadFileName );
@@ -957,5 +963,5 @@ int main ( int argc, char *argv [] )
     PrintStats ( totalLevels, totalTime, totalUpdates );
     RestoreConsoleSettings ();
 
-    return totalUpdates;
+    return 0;
 }

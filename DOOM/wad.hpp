@@ -24,6 +24,8 @@
 //
 // Revision History:
 //
+//   04-25-01	Added little/big endian conversions
+//
 //----------------------------------------------------------------------------
 
 #if ! defined ( _WAD_HPP_ )
@@ -37,8 +39,16 @@
     #include <stdio.h>
 #endif
 
-#define IWAD_ID		0x44415749	// ASCII - 'IWAD'
-#define PWAD_ID		0x44415750	// ASCII - 'PWAD'
+#if defined ( LITTLE_ENDIAN )
+    #define IWAD_ID		0x44415749	// ASCII - 'IWAD'
+    #define PWAD_ID		0x44415750	// ASCII - 'PWAD'
+#else
+    #define IWAD_ID		0x49574144	// ASCII - 'IWAD'
+    #define PWAD_ID		0x50574144	// ASCII - 'PWAD'
+
+    extern ULONG swap_ulong ( const unsigned char *ptr );
+    extern ULONG swap_ushort ( const unsigned char *ptr );
+#endif
 
 #define IS_TYPE(x,y)	(( * ( ULONG * ) ( x )) == ( y ))
 
@@ -83,7 +93,7 @@ enum eWadStyle {
     wst_FORMAT_1,		// DOOM / Heretic
     wst_FORMAT_2,		// DOOM ][
     wst_FORMAT_3		// Hexen
-};    
+};
 
 enum eWadStatus {
     ws_UNKNOWN,
@@ -130,40 +140,50 @@ public:
 
 class WAD {
 
-    char        *wadName;
-    FILE        *wadFile;
-    wadList     *list;
+    char               *m_Name;
+    FILE               *m_File;
+    wadList            *m_List;
 
-    bool      valid;
-    bool      registered;
-    bool      dirChanged;		// wadDirEntry added/deleted
+    bool                m_bValid;
+    bool                m_bRegistered;
+    bool                m_bDirChanged;		// wadDirEntry added/deleted
 
-    wadHeader    header;
-    wadDirEntry *directory;
-    wadDirInfo  *dirInfo;
-    eWadStatus   wadStatus;
-    eWadType     wadType;
-    eWadStyle    wadStyle;
-    
-    const wadDirEntry *mapStart,	*mapEnd;
-    const wadDirEntry *spriteStart,	*spriteEnd;
-    const wadDirEntry *patchStart,	*patchEnd;
-    const wadDirEntry *flatStart,	*flatEnd;
+    wadHeader           m_Header;
+    wadDirEntry        *m_Directory;
+    wadDirInfo         *m_DirInfo;
+    eWadStatus          m_Status;
+    eWadType            m_Type;
+    eWadStyle           m_Style;
 
-    void       **newData;
+    const wadDirEntry  *m_MapStart;
+    const wadDirEntry  *m_MapEnd;
+    const wadDirEntry  *m_SpriteStart;
+    const wadDirEntry  *m_SpriteEnd;
+    const wadDirEntry  *m_PatchStart;
+    const wadDirEntry  *m_PatchEnd;
+    const wadDirEntry  *m_FlatStart;
+    const wadDirEntry  *m_FlatEnd;
 
-    static int          noFilters;
-    static wadFilter  **filter;
+    void              **m_NewData;
+
+    static int          sm_NoFilters;
+    static wadFilter  **sm_Filter;
 
     bool EnlargeDirectory ( int holePos, int entries );
     bool ReduceDirectory ( int holePos, int entries );
 
     void FindMarkers ();
-		     
-    void readMasterDir ();
-    void writeMasterDir ();
 
-    ULONG  indexOf ( const wadDirEntry * ) const;
+    bool ReadHeader ( wadHeader * );
+    bool WriteHeader ( FILE *, wadHeader * );
+
+    bool ReadDirEntry ( wadDirEntry * );
+    bool WriteDirEntry ( FILE *, wadDirEntry * );
+
+    bool ReadDirectory ();
+    bool WriteDirectory ( FILE * );
+
+    ULONG IndexOf ( const wadDirEntry * ) const;
 
 public:
 
@@ -172,7 +192,7 @@ public:
 
     void SetList ( wadList * );
 
-    static bool isMap ( const char * );
+    static bool IsMap ( const char * );
     static bool AddFilter ( wadFilter * );
 
     // Called by wadList::Save
@@ -220,25 +240,25 @@ public:
 
     bool InsertBefore ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
     bool InsertAfter ( const wLumpName *, const char *, bool, const wadDirEntry * = NULL );
-					  									
+
     bool InsertBefore ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
     bool InsertAfter ( const wLumpName *, ULONG, void *, bool, const wadDirEntry * = NULL );
-							 
+
     bool Remove ( const wLumpName *, const wadDirEntry * = NULL, const wadDirEntry * = NULL  );
 };
 
-inline void WAD::Format ( ULONG newFormat )	{ * ( ULONG * ) header.type = newFormat; }
-inline void WAD::Type ( eWadType newType )	{ wadType = newType; }
-inline void WAD::Style ( eWadStyle newStyle )	{ wadStyle = newStyle; }
-		       		   	    		   	       
-inline const char *WAD::Name () const		{ return wadName; }
-inline ULONG       WAD::DirSize () const	{ return header.dirSize; }
-inline ULONG       WAD::Format () const		{ return * ( ULONG * ) header.type; }
-inline eWadStatus  WAD::Status () const		{ return wadStatus; }
-inline eWadType    WAD::Type () const		{ return wadType; }
-inline eWadStyle   WAD::Style () const		{ return wadStyle; }
-inline bool     WAD::IsValid () const	{ return valid; }
-inline bool     WAD::IsRegistered () const	{ return registered; }
+inline void WAD::Format ( ULONG newFormat )	{ * ( ULONG * ) m_Header.type = newFormat; }
+inline void WAD::Type ( eWadType newType )	{ m_Type = newType; }
+inline void WAD::Style ( eWadStyle newStyle )	{ m_Style = newStyle; }
+
+inline const char *WAD::Name () const		{ return m_Name; }
+inline ULONG       WAD::DirSize () const	{ return m_Header.dirSize; }
+inline ULONG       WAD::Format () const		{ return * ( ULONG * ) m_Header.type; }
+inline eWadStatus  WAD::Status () const		{ return m_Status; }
+inline eWadType    WAD::Type () const		{ return m_Type; }
+inline eWadStyle   WAD::Style () const		{ return m_Style; }
+inline bool        WAD::IsValid () const	{ return m_bValid; }
+inline bool        WAD::IsRegistered () const	{ return m_bRegistered; }
 
 struct wadListDirEntry {
     WAD               *wad;
@@ -247,18 +267,19 @@ struct wadListDirEntry {
 
 class wadList {
 
-    ULONG            dirSize;
-    ULONG            maxSize;
-    wadListDirEntry *directory;
-    eWadType         wadType;
-    eWadStyle        wadStyle;
-
     struct wadListEntry {
         WAD          *wad;
         wadListEntry *Next;
-    } *List;
+    };
 
-    ULONG  indexOf ( const wadListDirEntry * ) const;
+    ULONG            m_DirSize;
+    ULONG            m_MaxSize;
+    wadListDirEntry *m_Directory;
+    eWadType         m_Type;
+    eWadStyle        m_Style;
+    wadListEntry    *m_List;
+
+    ULONG  IndexOf ( const wadListDirEntry * ) const;
 
     int    AddLevel ( ULONG, const wadDirEntry *&, WAD * );
     void   AddDirectory ( WAD *, bool = true );
@@ -287,13 +308,13 @@ public:
     const wadListDirEntry *FindWAD ( const char *, const wadListDirEntry * = NULL, const wadListDirEntry * = NULL ) const;
 
     bool Contains ( WAD * ) const;
-    bool isEmpty () const;
+    bool IsEmpty () const;
     bool HasChanged () const;
 };
 
-inline ULONG     wadList::DirSize () const	{ return dirSize; }
-inline bool      wadList::isEmpty () const	{ return ( List == NULL ) ? true : false; }
-inline eWadType  wadList::Type () const		{ return wadType; }
-inline eWadStyle wadList::Style () const	{ return wadStyle; }
+inline ULONG     wadList::DirSize () const	{ return m_DirSize; }
+inline bool      wadList::IsEmpty () const	{ return ( m_List == NULL ) ? true : false; }
+inline eWadType  wadList::Type () const		{ return m_Type; }
+inline eWadStyle wadList::Style () const	{ return m_Style; }
 
 #endif

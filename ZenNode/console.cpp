@@ -29,6 +29,8 @@
 //   11-19-95	Updated command line again
 //   12-06-95	Add config & customization file support
 //   11-??-98	Added Linux support
+//   04-21-01	Modified Linux code to match Win32 console I/O behavior
+//   04-26-01	Added SIGABRT to list of 'handled' signals
 //
 //----------------------------------------------------------------------------
 
@@ -52,6 +54,7 @@
     #include <windows.h>
     #include <wincon.h>
 #elif defined ( __GNUC__ )
+    #include <stdarg.h>
     #include <signal.h>
     #include <sys/time.h>
     #include <termios.h>
@@ -289,6 +292,7 @@ void MoveDown ( int delta )
 
 #elif defined ( __GNUC__ )
 
+static FILE *console;
 static termios stored;
 static int lastChar;
 static int keyhit;
@@ -318,12 +322,25 @@ bool kbhit ()
     return ( keyhit != 0 ) ? true : false;
 }
 
+void cprintf ( char *fmt, ... )
+{
+    va_list args;
+    va_start ( args, fmt );
+
+    vfprintf ( console, fmt, args );
+
+    va_end ( args );
+}
+
 void SignalHandler ( int signal )
 {
     struct sigaction sa;
     memset ( &sa, 0, sizeof ( sa ));
     sa.sa_handler = SIG_DFL;
     switch ( signal ) {
+        case SIGABRT :
+            RestoreConsoleSettings ();
+            break;
         case SIGINT :
             RestoreConsoleSettings ();
             printf ( "\r\n" );
@@ -355,14 +372,21 @@ void SaveConsoleSettings ()
 
     tcsetattr ( 0, TCSANOW, &newterm );
 
+    // Create a 'console' device
+    console = fopen ( "/dev/tty", "w" );
+    if ( console == NULL ) {
+        console = stdout;
+    }
+
     // Hide the cursor
-    printf ( "\033[?25l" );
-    fflush ( stdout );
+    fprintf ( console, "\033[?25l" );
+    fflush ( console );
 
     struct sigaction sa;
     memset ( &sa, 0, sizeof ( sa ));
     sa.sa_handler = SignalHandler;
-    sigaction ( SIGINT, &sa, NULL );
+    sigaction ( SIGABRT, &sa, NULL );
+    sigaction ( SIGINT,  &sa, NULL );
     sigaction ( SIGTSTP, &sa, NULL );
     sigaction ( SIGCONT, &sa, NULL );
 
@@ -374,15 +398,16 @@ void RestoreConsoleSettings ()
     struct sigaction sa;
     memset ( &sa, 0, sizeof ( sa ));
     sa.sa_handler = SIG_DFL;
-    sigaction ( SIGINT, &sa, NULL );
+    sigaction ( SIGABRT, &sa, NULL );
+    sigaction ( SIGINT,  &sa, NULL );
     sigaction ( SIGTSTP, &sa, NULL );
     sigaction ( SIGCONT, &sa, NULL );
 
     tcsetattr ( 0, TCSANOW, &stored );
 
     // Restore the cursor
-    printf ( "\033[?25h" );
-    fflush ( stdout );
+    fprintf ( console, "\033[?25h" );
+    fflush ( console );
 }
 
 void GetXY ( ULONG *x, ULONG *y )
@@ -393,7 +418,8 @@ void GetXY ( ULONG *x, ULONG *y )
 
 void GotoXY ( ULONG x, ULONG y )
 {
-    printf ( "\033[%dG", x );
+    fprintf ( console, "\033[%dG", x );
+    fflush ( console );
 }
 
 ULONG CurrentTime ()
@@ -405,50 +431,50 @@ ULONG CurrentTime ()
 
 void Status ( char *message )
 {
-    printf ( "\033[%dG%s\033[K", startX, message );
-    fflush ( stdout );
+    fprintf ( console, "\033[%dG%s\033[K", startX, message );
+    fflush ( console );
 }
 
 void GoRight ()
 {
-    printf ( "R" );
-    fflush ( stdout );
+    fprintf ( console, "R" );
+    fflush ( console );
 }
 
 void GoLeft ()
 {
-    printf ( "\033[DL" );
-    fflush ( stdout );
+    fprintf ( console, "\033[DL" );
+    fflush ( console );
 }
 
 void Backup ()
 {
-    printf ( "\033[D" );
-    fflush ( stdout );
+    fprintf ( console, "\033[D" );
+    fflush ( console );
 }
 
 void ShowDone ()
 {
-    printf ( "*\033[D" );
-    fflush ( stdout );
+    fprintf ( console, "*\033[D" );
+    fflush ( console );
 }
 
 void ShowProgress ()
 {
-    printf ( "%c\033[D", progress [ progressIndex++ % SIZE ( progress )] );
-    fflush ( stdout );
+    fprintf ( console, "%c\033[D", progress [ progressIndex++ % SIZE ( progress )] );
+    fflush ( console );
 }
 
 void MoveUp ( int delta )
 {
-    printf ( "\033[%dF", delta );
-    fflush ( stdout );
+    fprintf ( console, "\033[%dF", delta );
+    fflush ( console );
 }
 
 void MoveDown ( int delta )
 {
-    printf ( "\033[%dE", delta );
-    fflush ( stdout );
+    fprintf ( console, "\033[%dE", delta );
+    fflush ( console );
 }
 
 #endif

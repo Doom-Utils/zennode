@@ -52,7 +52,8 @@ struct sRejectOptions {
     bool  Rebuild;
     bool  Empty;
     bool  Force;
-    bool  Connectivity;
+    bool  FindChildren;
+    bool  UseGraphs;
 };
 
 typedef unsigned short BAM;

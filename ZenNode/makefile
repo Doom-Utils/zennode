@@ -1,16 +1,16 @@
 # ZenNode makefile for Linux
 
-CC := g++
-CFLAGS := -g -O6 -fstrength-reduce -funroll-loops -malign-jumps=2 -mcpu=i686 -fno-exceptions -fno-rtti
-WARNINGS := -Wall -Wno-format -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winline
-INCLUDES := -I../DOOM -I../common
+CC       = g++
+CFLAGS   = -g -O6 -fstrength-reduce -funroll-loops -malign-jumps=4 -fno-exceptions -fno-rtti
+WARNINGS = -Wall -Wno-format -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winline
+INCLUDES = -I../DOOM -I../common
 
 .cpp.o:
 	$(CC) -c $(CFLAGS) $(WARNINGS) $(INCLUDES) -o $@ $<
 
 .SUFFIXES: .cpp .o
 
-all: ZenNode compare bspinfo
+all: ZenNode ZenTest compare bspinfo
 
 depend: clean
 

@@ -51,7 +51,7 @@
 #include "wad.hpp"
 #include "level.hpp"
 
-#define VERSION		"1.00"
+#define VERSION		"1.02"
 #define MAX_LEVELS	50
 
 #define UNSUPPORTED_FEATURE	-1
@@ -131,8 +131,9 @@ int parseArgs ( int index, char *argv[] )
                 while ( *ptr ) {
                     int option = *ptr++;
                     bool setting = true;
-                    if (( *ptr == '+' ) || ( *ptr == '-' ))
+                    if (( *ptr == '+' ) || ( *ptr == '-' )) {
                         setting = ( *ptr++ == '-' ) ? false : true;
+                    }
                     switch ( option ) {
                         default  : throw UNRECOGNIZED_PARAMETER;
                     }
@@ -158,7 +159,7 @@ int parseArgs ( int index, char *argv[] )
     return index;
 }
 
-int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadList *list )
+int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadList *list1, wadList *list2 )
 {
     int index = 0, errors = 0;
 
@@ -171,34 +172,46 @@ int getLevels ( int argIndex, char *argv[], char names [][MAX_LUMP_NAME], wadLis
     char *ptr = strtok ( buffer, "+" );
 
     // See if the user requested specific levels
-    if ( WAD::isMap ( ptr )) {
+    if ( WAD::IsMap ( ptr )) {
         argIndex++;
         while ( ptr ) {
-            if ( WAD::isMap ( ptr ))
-                if ( list->FindWAD ( ptr ))
+            if ( WAD::IsMap ( ptr )) {
+                if ( list1->FindWAD ( ptr )) {
                     strcpy ( names [index++], ptr );
-                else
+                } else {
                     fprintf ( stderr, "  Could not find %s\n", ptr, errors++ );
-            else
+                }
+            } else {
                 fprintf ( stderr, "  %s is not a valid name for a level\n", ptr, errors++ );
+            }
             ptr = strtok ( NULL, "+" );
         }
     } else {
-        int size = list->DirSize ();
-        const wadListDirEntry *dir = list->GetDir ( 0 );
+        int size = list1->DirSize ();
+        const wadListDirEntry *dir = list1->GetDir ( 0 );
         for ( int i = 0; i < size; i++ ) {
-            if ( dir->wad->isMap ( dir->entry->name )) {
-                if ( index == MAX_LEVELS )
+            if ( dir->wad->IsMap ( dir->entry->name )) {
+                if ( index == MAX_LEVELS ) {
                     fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name, errors++ );
-                else
+                } else {
                     memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
+                }
             }
             dir++;
         }
     }
     memset ( names [index], 0, MAX_LUMP_NAME );
 
+    // Remove any maps that aren't in both files
+    for ( int i = 0; names [i][0]; i++ ) {
+        if ( list2->FindWAD ( names [i] ) == NULL ) {
+            memcpy ( names + i, names + i + 1, ( index - i ) * MAX_LUMP_NAME );
+            i--;
+        }
+    }
+
     if ( errors ) fprintf ( stderr, "\n" );
+
     return argIndex;
 }
 
@@ -207,8 +220,9 @@ void EnsureExtension ( char *fileName, const char *ext )
     int length = strlen ( fileName );
     char *ptr = strrchr ( fileName, '.' );
     if (( ptr && strchr ( ptr, '\\' )) ||
-        ( ! ptr && stricmp ( &fileName[length-4], ext )))
+        ( ! ptr && stricmp ( &fileName[length-4], ext ))) {
         strcat ( fileName, ext );
+    }
 }
 
 const char *TypeName ( eWadType type )
@@ -252,16 +266,17 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
             fprintf ( stderr, msg, wadName );
             delete wad;
         } else {
-            if ( ! myList->isEmpty ()) {
+            if ( ! myList->IsEmpty ()) {
                 cprintf ( "Merging: %s with %s\r\n", wadName, listNames );
                 *wadFileName++ = '+';
             }
             if ( myList->Add ( wad ) == false ) {
                 errors++;
-                if ( myList->Type () != wt_UNKNOWN )
+                if ( myList->Type () != wt_UNKNOWN ) {
                     fprintf ( stderr, "ERROR: %s is not a %s PWAD.\n", wadName, TypeName ( myList->Type ()));
-                else
+                } else {
                     fprintf ( stderr, "ERROR: %s is not the same type.\n", wadName );
+                }
                 delete wad;
             } else {
                 char *end = wadName + strlen ( wadName ) - 1;
@@ -307,17 +322,32 @@ int CompareREJECT ( DoomLevel *srcLevel, DoomLevel *tgtLevel )
     int noSectors = srcLevel->SectorCount ();
     char *srcPtr = ( char * ) srcLevel->GetReject ();
     char *tgtPtr = ( char * ) tgtLevel->GetReject ();
+
+    int **vis2hid = new int * [ noSectors ];
+    int **hid2vis = new int * [ noSectors ];
+
+    int *v2hCount = new int [ noSectors ];
+    int *h2vCount = new int [ noSectors ];
+
     int bits = 8;
     int srcVal = *srcPtr++;
     int tgtVal = *tgtPtr++;
     int dif = srcVal ^ tgtVal;
     for ( int i = 0; i < noSectors; i++ ) {
+        vis2hid [i] = new int [ noSectors ];
+        hid2vis [i] = new int [ noSectors ];
+        memset ( vis2hid [i], 0, noSectors * sizeof ( int ));
+        memset ( hid2vis [i], 0, noSectors * sizeof ( int ));
+        v2hCount [i] = 0;
+        h2vCount [i] = 0;
         for ( int j = 0; j < noSectors; j++ ) {
-            if (( dif & 1 ) && ( i < j )) {
+            if ( dif & 1 ) {
+                if ( srcVal & 1 ) {
+                    hid2vis [i][h2vCount [i]++] = j;
+                } else {
+                    vis2hid [i][v2hCount [i]++] = j;
+                }
                 match = false;
-                printf ( "\n[ %3d, %3d ] %3s  %3s", i, j,
-                    ( srcVal & 1 ) ? "Hid" : "Vis",
-                    ( tgtVal & 1 ) ? "Hid" : "Vis" );
             }
             if ( --bits == 0 ) {
                 bits = 8;
@@ -331,7 +361,53 @@ int CompareREJECT ( DoomLevel *srcLevel, DoomLevel *tgtLevel )
             }
         }
     }
-    if ( match ) printf ( "Perfect Match\n" );
+
+    bool first = true;
+    for ( int i = 0; i < noSectors; i++ ) {
+        if (( v2hCount [i] == 0 ) && ( h2vCount [i] == 0 )) continue;
+        bool v2h = false;
+        for ( int j = 0; j < v2hCount [i]; j++ ) {
+            int index = vis2hid [i][j];
+	    if (( v2hCount [i] > v2hCount [index] ) ||
+	        (( v2hCount [i] == v2hCount [index] ) && ( i > index ))) {
+	        v2h = true;
+	        break;
+	    }
+	}
+        bool h2v = false;
+        for ( int j = 0; j < h2vCount [i]; j++ ) {
+            int index = hid2vis [i][j];
+	    if (( h2vCount [i] > h2vCount [index] ) ||
+	        (( h2vCount [i] == h2vCount [index] ) && ( i > index ))) {
+	        h2v = true;
+	        break;
+	    }
+	}
+        if ( v2h == true ) {
+            if ( first == false ) printf ( "            " );
+            printf ( "vis->hid %5d:", i );
+            for ( int j = 0; j < v2hCount [i]; j++ ) {
+                printf ( " %d", vis2hid [i][j] );
+            }
+            printf ( "\n" );
+            first = false;
+        }
+        if ( h2v == true ) {
+            if ( first == false ) printf ( "            " );
+            printf ( "hid->vis %5d:", i );
+            for ( int j = 0; j < h2vCount [i]; j++ ) {
+                printf ( " %d", hid2vis [i][j] );
+            }
+            printf ( "\n" );
+            first = false;
+        }
+    }
+
+    if ( match == true ) printf ( "Perfect Match\n" );
+
+    delete [] vis2hid;
+    delete [] hid2vis;
+
     return match ? 0 : 1;
 }
 
@@ -344,7 +420,7 @@ int ProcessLevel ( char *name, wadList *myList1, wadList *myList2 )
     DoomLevel *tgtLevel = NULL;
     const wadListDirEntry *dir = myList1->FindWAD ( name );
     DoomLevel *srcLevel = new DoomLevel ( name, dir->wad );
-    if ( srcLevel->isValid () == false ) {
+    if ( srcLevel->isValid ( true ) == false ) {
         change = -1000;
         Status ( "This level is not valid... " );
         goto done;
@@ -352,7 +428,7 @@ int ProcessLevel ( char *name, wadList *myList1, wadList *myList2 )
 
     dir = myList2->FindWAD ( name );
     tgtLevel = new DoomLevel ( name, dir->wad );
-    if ( tgtLevel->isValid () == false ) {
+    if ( tgtLevel->isValid ( true ) == false ) {
         change = -1000;
         Status ( "This level is not valid... " );
         goto done;
@@ -366,8 +442,6 @@ int ProcessLevel ( char *name, wadList *myList1, wadList *myList2 )
     change = CompareREJECT ( srcLevel, tgtLevel );
 
 done:
-
-    cprintf ( "\r\n" );
 
     delete tgtLevel;
     delete srcLevel;
@@ -400,16 +474,16 @@ int main ( int argc, char *argv[] )
 
         char wadFileName1 [ 256 ];
         wadList *myList1 = getInputFiles ( argv [argIndex++], wadFileName1 );
-        if ( myList1->isEmpty ()) { changes = -1000;  break; }
+        if ( myList1->IsEmpty ()) { changes = -1000;  break; }
 
         char wadFileName2 [ 256 ];
         wadList *myList2 = getInputFiles ( argv [argIndex++], wadFileName2 );
-        if ( myList2->isEmpty ()) { changes = -1000;  break; }
+        if ( myList2->IsEmpty ()) { changes = -1000;  break; }
 
         cprintf ( "Comparing: %s and %s\r\n\n", wadFileName1, wadFileName2 );
 
         char levelNames [MAX_LEVELS+1][MAX_LUMP_NAME];
-        argIndex = getLevels ( argIndex, argv, levelNames, myList1 );
+        argIndex = getLevels ( argIndex, argv, levelNames, myList1, myList2 );
 
         if ( levelNames [0][0] == '\0' ) {
             fprintf ( stderr, "Unable to find any valid levels in %s\n", wadFileName1 );
@@ -424,8 +498,6 @@ int main ( int argc, char *argv[] )
             if ( kbhit () && ( getch () == 0x1B )) break;
 
         } while ( levelNames [noLevels][0] );
-
-        cprintf ( "\r\n" );
 
         delete myList1;
         delete myList2;
