@@ -378,7 +378,7 @@ void DoomLevel::PackVertices ()
 #if defined ( __BORLANDC__ )
     #if sizeof ( wVertex ) != sizeof ( long )
         #error Sorry, PackVertices assumes sizeof ( wVertex ) == sizeof ( long )
-	#endif
+    #endif
 #endif
     long *vert = ( long * ) m_Vertex;
     int *Used = new int [ m_NoVertices ], newCount = 0;

@@ -69,7 +69,7 @@ DBG_REGISTER ( __FILE__ );
     LOG_FLAGS g_LogFlags;
 #endif
 
-#define VERSION		"1.0.7"
+#define VERSION		"1.0.8"
 #define BANNER          "ZenNode Version " VERSION " (c) 1994-2001 Marc Rousseau"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99

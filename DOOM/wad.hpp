@@ -247,18 +247,18 @@ public:
     bool Remove ( const wLumpName *, const wadDirEntry * = NULL, const wadDirEntry * = NULL  );
 };
 
-inline void WAD::Format ( ULONG newFormat )	{ * ( ULONG * ) m_Header.type = newFormat; }
-inline void WAD::Type ( eWadType newType )	{ m_Type = newType; }
-inline void WAD::Style ( eWadStyle newStyle )	{ m_Style = newStyle; }
+inline void WAD::Format ( ULONG newFormat )     { * ( ULONG * ) m_Header.type = newFormat; }
+inline void WAD::Type ( eWadType newType )      { m_Type = newType; }
+inline void WAD::Style ( eWadStyle newStyle )   { m_Style = newStyle; }
 
-inline const char *WAD::Name () const		{ return m_Name; }
-inline ULONG       WAD::DirSize () const	{ return m_Header.dirSize; }
-inline ULONG       WAD::Format () const		{ return * ( ULONG * ) m_Header.type; }
-inline eWadStatus  WAD::Status () const		{ return m_Status; }
-inline eWadType    WAD::Type () const		{ return m_Type; }
-inline eWadStyle   WAD::Style () const		{ return m_Style; }
-inline bool        WAD::IsValid () const	{ return m_bValid; }
-inline bool        WAD::IsRegistered () const	{ return m_bRegistered; }
+inline const char *WAD::Name () const           { return m_Name; }
+inline ULONG       WAD::DirSize () const        { return m_Header.dirSize; }
+inline ULONG       WAD::Format () const         { return * ( ULONG * ) m_Header.type; }
+inline eWadStatus  WAD::Status () const         { return m_Status; }
+inline eWadType    WAD::Type () const           { return m_Type; }
+inline eWadStyle   WAD::Style () const          { return m_Style; }
+inline bool        WAD::IsValid () const        { return m_bValid; }
+inline bool        WAD::IsRegistered () const   { return m_bRegistered; }
 
 struct wadListDirEntry {
     WAD               *wad;

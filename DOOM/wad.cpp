@@ -220,7 +220,7 @@ bool WAD::WriteHeader ( FILE *file, wadHeader *header )
     header = &temp;
 #endif
 
-    return ( fwrite ( header, sizeof ( wadDirEntry ), 1, file ) == 1 ) ? true : false;
+    return ( fwrite ( header, sizeof ( wadHeader ), 1, file ) == 1 ) ? true : false;
 }
 
 #if defined ( BIG_ENDIAN )
