@@ -170,7 +170,7 @@ struct wBlockMap {
     SHORT	yOrigin;
     USHORT	noColumns;
     USHORT	noRows;
-//  USHORT	data [0];
+//    USHORT	data [];
 };
 
 class DoomLevel {
@@ -199,8 +199,8 @@ class DoomLevel {
     int		rejectSize;
     int		blockMapSize;
 
-    void       *rawThing;
-    void       *rawLineDef;
+    char       *rawThing;
+    char       *rawLineDef;
 
     bool        thingsChanged;
     bool        lineDefsChanged;

@@ -296,7 +296,7 @@ static int keyhit;
 extern char *strupr ( char *ptr );
 
 int getch ()
-{    
+{
     int retVal = lastChar;
     lastChar = 0;
 

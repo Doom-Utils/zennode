@@ -246,14 +246,14 @@ void DoomLevel::CleanUp ()
 {
     DeleteTransients ();
 
-    if ( rawThing )   { delete rawThing;    rawThing   = NULL; }////FIX ME
-    if ( rawLineDef ) { delete rawLineDef;  rawLineDef = NULL; }////FIX ME
+    if ( rawThing )   { delete [] rawThing;    rawThing   = NULL; }
+    if ( rawLineDef ) { delete [] rawLineDef;  rawLineDef = NULL; }
 
-    if ( thing )      { delete thing;       thing      = NULL; }
-    if ( lineDef )    { delete lineDef;     lineDef    = NULL; }
-    if ( sideDef )    { delete sideDef;     sideDef    = NULL; }
-    if ( vertex )     { delete vertex;      vertex     = NULL; }
-    if ( sector )     { delete sector;      sector     = NULL; }
+    if ( thing )      { delete [] thing;       thing      = NULL; }
+    if ( lineDef )    { delete [] lineDef;     lineDef    = NULL; }
+    if ( sideDef )    { delete [] sideDef;     sideDef    = NULL; }
+    if ( vertex )     { delete [] vertex;      vertex     = NULL; }
+    if ( sector )     { delete [] sector;      sector     = NULL; }
 
     WipeOut ();
 }
@@ -262,8 +262,8 @@ void DoomLevel::CleanUp ()
 void DoomLevel::AdjustByteOrder ()
 {
     /*
-        void       *rawThing;		// Check Format
-        void       *rawLineDef;		// Check Format
+        char       *rawThing;		// Check Format
+        char       *rawLineDef;		// Check Format
 
         wThing     *thing;
         wLineDef   *lineDef;
@@ -507,7 +507,7 @@ void DoomLevel::ReadThings ( bool testFormat, const wadDirEntry *start, const wa
         delete testThing;
     }
 
-    rawThing = wad->ReadEntry ( dir, &temp );
+    rawThing = ( char * ) wad->ReadEntry ( dir, &temp );
 
     if ( newFormat ) {
         noThings = temp / sizeof ( wThing2 );
@@ -529,7 +529,8 @@ bool DoomLevel::ReadLineDefs ( const wadDirEntry *start, const wadDirEntry *end 
     if (( newFormat == true ) && ( dir->size % sizeof ( wLineDef2 ))) return true;
     if (( newFormat == false ) && ( dir->size % sizeof ( wLineDef1 ))) return true;
 
-    rawLineDef = wad->ReadEntry ( dir, &temp );
+    rawLineDef = ( char * ) wad->ReadEntry ( dir, &temp );
+
     if ( newFormat ) {
         noLineDefs = temp / sizeof ( wLineDef2 );
         lineDef = new wLineDef [ noLineDefs ];
@@ -745,13 +746,13 @@ bool DoomLevel::SaveThings ( const wadDirEntry *start, const wadDirEntry *end )
 {
     bool changed;
     const wadDirEntry *dir = wad->FindDir ( "THINGS", start, end );
-    if ( rawThing ) delete rawThing;////FIX ME
+    if ( rawThing ) delete [] rawThing;
     if ( newFormat ) {
-        rawThing = new wThing2 [ noThings ];
+        rawThing = new char [ sizeof ( wThing2 ) * noThings ];
         ConvertThingToRaw2 ( noThings, thing, ( wThing2 * ) rawThing );
         changed = wad->WriteEntry ( dir, noThings * sizeof ( wThing2 ), rawThing, false );
     } else {
-        rawThing = new wThing1 [ noThings ];
+        rawThing = new char [ sizeof ( wThing1 ) * noThings ];
         ConvertThingToRaw1 ( noThings, thing, ( wThing1 * ) rawThing );
         changed = wad->WriteEntry ( dir, noThings * sizeof ( wThing1 ), rawThing, false );
     }
@@ -762,13 +763,13 @@ bool DoomLevel::SaveLineDefs ( const wadDirEntry *start, const wadDirEntry *end 
 {
     bool changed;
     const wadDirEntry *dir = wad->FindDir ( "LINEDEFS", start, end );
-    if ( rawLineDef ) delete rawLineDef;////FIX ME
+    if ( rawLineDef ) delete [] rawLineDef;
     if ( newFormat ) {
-        rawLineDef = new wLineDef2 [ noLineDefs ];
+        rawLineDef = new char [ sizeof ( wLineDef2 ) * noLineDefs ];
         ConvertLineDefToRaw2 ( noLineDefs, lineDef, ( wLineDef2 * ) rawLineDef );
         changed = wad->WriteEntry ( dir, noLineDefs * sizeof ( wLineDef2 ), rawLineDef, false );
     } else {
-        rawLineDef = new wLineDef1 [ noLineDefs ];
+        rawLineDef = new char [ sizeof ( wLineDef1 ) * noLineDefs ];
         ConvertLineDefToRaw1 ( noLineDefs, lineDef, ( wLineDef1 * ) rawLineDef );
         changed = wad->WriteEntry ( dir, noLineDefs * sizeof ( wLineDef1 ), rawLineDef, false );
     }

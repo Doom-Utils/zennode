@@ -26,9 +26,7 @@
 //
 //----------------------------------------------------------------------------
 
-//#include <conio.h>
 #include <ctype.h>
-//#include <mem.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,10 +72,10 @@ int parseArgs ( int index, char *argv[] )
             int ch = *ptr++;
             if ( ch != '-' ) return index;
             int option = toupper ( *ptr++ );
-            int setting = true;
+            bool setting = true;
             if (( *ptr == '+' ) || ( *ptr == '-' )) {
                 setting = ( *ptr++ == '+' ) ? true : false;
-	    }
+            }
             switch ( option ) {
                 case 'T' : flags.Tree = setting;	break;
                 default  : fprintf ( stderr, "Unrecognized parameter '%s'\n", argv [ index-1 ] );
@@ -154,7 +152,7 @@ void EnsureExtension ( char *fileName, const char *ext )
         ( ! ptr && strcmp ( &fileName[length-4], ext ))) {
         strcat ( fileName, ext );
     }
-}			       
+}
 
 wadList *getInputFiles ( char *cmdLine, char *wadFileName )
 {
@@ -282,7 +280,7 @@ void AnalyzeBSP ( DoomLevel *curLevel )
 ////        lineDefs++;
 ////        const wVertex *vertS = &vertices [ lineDef[i].start ];
 ////        const wVertex *vertE = &vertices [ lineDef[i].end ];
-////        if (( vertS->x != vertE->x ) && ( vertS->y != vertE->y )) 
+////        if (( vertS->x != vertE->x ) && ( vertS->y != vertE->y ))
 ////            totalDiagonals++;
         if ( lineDef[i].sideDef[0] != NO_SIDEDEF ) sideDefs++;
         if ( lineDef[i].sideDef[1] != NO_SIDEDEF ) sideDefs++;
@@ -328,7 +326,7 @@ int main ( int argc, char *argv[] )
 
         char levelNames [MAX_LEVELS+1][MAX_LUMP_NAME];
         argIndex = getLevels ( argIndex, argv, levelNames, myList );
-    
+
         if ( levelNames [0][0] == '\0' ) {
             fprintf ( stderr, "Unable to find any valid levels in %s\n", wadFileName );
             break;
@@ -336,7 +334,7 @@ int main ( int argc, char *argv[] )
 
         if ( ! flags.Tree ) {
             printf ( "         Depth (Avg)   FOM    Balance      Splits      Diagonals  Nodes  Segs\n" );
-	}
+        }
 
         int noLevels = 0;
 

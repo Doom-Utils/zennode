@@ -69,7 +69,7 @@ DBG_REGISTER ( __FILE__ );
     LOG_FLAGS g_LogFlags;
 #endif
 
-#define VERSION		"1.0.5"
+#define VERSION		"1.0.6"
 #define BANNER          "ZenNode Version " VERSION " (c) 1994-2001 Marc Rousseau\r\n\r\n"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
@@ -80,28 +80,12 @@ DBG_REGISTER ( __FILE__ );
 
 char HammingTable [ 256 ];
 
-int  CreateBLOCKMAP ( DoomLevel *level, bool compress );
-bool CreateREJECT ( DoomLevel *level, bool empty, bool force, ULONG *efficiency );
-
-struct {
-    struct {
-        bool  Rebuild;
-        bool  Compress;
-    } BlockMap;
-    struct {
-        bool  Rebuild;
-        int      Method;
-        bool  Quiet;
-        bool  Unique;
-        bool  ReduceLineDefs;
-    } Nodes;
-    struct {
-        bool  Rebuild;
-        bool  Empty;
-        bool  Force;
-    } Reject;
-    bool  WriteWAD;
-    bool  Extract;
+struct sOptions {
+    sBlockMapOptions BlockMap;
+    sNodeOptions     Nodes;
+    sRejectOptions   Reject;
+    bool             WriteWAD;
+    bool             Extract;
 } config;
 
 extern ULONG startX, startY;
@@ -163,13 +147,13 @@ void printHelp ()
     fprintf ( stdout, "        q                   - Don't display progress bar\n" );
     fprintf ( stdout, "        u               %c   - Ensure all sub-sectors contain only 1 sector\n", DEFAULT_CHAR );
     fprintf ( stdout, "        i                   - Ignore non-visible lineDefs\n" );
-    fprintf ( stdout, "     -r[z]              %c - Rebuild REJECT resource\n", DEFAULT_CHAR );
+    fprintf ( stdout, "     -r[zfc]            %c - Rebuild REJECT resource\n", DEFAULT_CHAR );
     fprintf ( stdout, "        z                   - Insert empty REJECT resource\n" );
     fprintf ( stdout, "        f                   - Rebuild even if special effects are detected\n" );
+    fprintf ( stdout, "        c               %c   - Preprocess sectors by connectivity\n", DEFAULT_CHAR );
     fprintf ( stdout, "     -t                   - Don't write output file (test mode)\n" );
     fprintf ( stdout, "\n" );
-    fprintf ( stdout, "     level - ExMy for DOOM / Heretic\n" );
-    fprintf ( stdout, "             MAPxx for DOOM II / HEXEN\n" );
+    fprintf ( stdout, "     level - ExMy for DOOM/Heretic or MAPxx for DOOM II/HEXEN\n" );
 }
 
 bool parseBLOCKMAPArgs ( char *&ptr, bool setting )
@@ -182,7 +166,7 @@ bool parseBLOCKMAPArgs ( char *&ptr, bool setting )
         bool setting = true;
         if (( *ptr == '+' ) || ( *ptr == '-' )) {
             setting = ( *ptr++ == '+' ) ? true : false;
-	}
+        }
         switch ( option ) {
             case 'C' : config.BlockMap.Compress = setting;	break;
             default  : return true;
@@ -227,10 +211,11 @@ bool parseREJECTArgs ( char *&ptr, bool setting )
         bool setting = true;
         if (( *ptr == '+' ) || ( *ptr == '-' )) {
             setting = ( *ptr++ == '+' ) ? true : false;
-	}
+        }
         switch ( option ) {
             case 'Z' : config.Reject.Empty = setting;		break;
             case 'F' : config.Reject.Force = setting;		break;
+            case 'C' : config.Reject.Connectivity  = setting;	break;
             default  : return true;
         }
         config.Reject.Rebuild = true;
@@ -264,9 +249,9 @@ int parseArgs ( int index, char *argv [] )
                 case 'N' : localError = parseNODESArgs ( ptr, setting );        break;
                 case 'R' : localError = parseREJECTArgs ( ptr, setting );       break;
                 case 'T' : config.WriteWAD = ! setting;                         break;
-                default  : localError = true;					
+                default  : localError = true;
             }
-        }   
+        }
         if ( localError ) {
             errors = true;
             int offset = ptr - localCopy - 1;
@@ -322,7 +307,7 @@ void ReadConfigFile ( char *argv [] )
                     case 'R' : localError = parseREJECTArgs ( ptr, setting );       break;
                     case 'T' : config.WriteWAD = ! setting;                         break;
                     default  : localError = true;
-                }		   
+                }
             }
             if ( localError ) {
                 errors = true;
@@ -355,15 +340,15 @@ int getLevels ( int argIndex, char *argv [], char names [][MAX_LUMP_NAME], wadLi
     if ( WAD::isMap ( ptr )) {
         argIndex++;
         while ( ptr ) {
-	    if ( WAD::isMap ( ptr )) {
-	        if ( list->FindWAD ( ptr )) {
+            if ( WAD::isMap ( ptr )) {
+                if ( list->FindWAD ( ptr )) {
                     strcpy ( names [index++], ptr );
                 } else {
                     fprintf ( stderr, "  Could not find %s\n", ptr, errors++ );
-		}
+                }
             } else {
                 fprintf ( stderr, "  %s is not a valid name for a level\n", ptr, errors++ );
-	    }
+            }
             ptr = strtok ( NULL, "+" );
         }
     } else {
@@ -371,11 +356,11 @@ int getLevels ( int argIndex, char *argv [], char names [][MAX_LUMP_NAME], wadLi
         const wadListDirEntry *dir = list->GetDir ( 0 );
         for ( int i = 0; i < size; i++ ) {
             if ( dir->wad->isMap ( dir->entry->name )) {
-	        if ( index == MAX_LEVELS ) {
+                if ( index == MAX_LEVELS ) {
                     fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name, errors++ );
                 } else {
                     memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
-		}
+                }
             }
             dir++;
         }
@@ -391,9 +376,7 @@ void EnsureExtension ( char *fileName, const char *ext )
     FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
 
     int length = strlen ( fileName );
-    char *ptr = strrchr ( fileName, '.' );
-    if (( ptr && strchr ( ptr, SEPERATOR )) ||
-        ( ! ptr && stricmp ( &fileName [length-4], ext ))) {
+    if ( stricmp ( &fileName [length-4], ext ) != 0 ) {
         strcat ( fileName, ext );
     }
 }
@@ -455,7 +438,7 @@ wadList *getInputFiles ( char *cmdLine, char *wadFileName )
                     fprintf ( stderr, "ERROR: %s is not a %s PWAD.\n", wadName, TypeName ( myList->Type ()));
                 } else {
                     fprintf ( stderr, "ERROR: %s is not the same type.\n", wadName );
-		}
+                }
                 delete wad;
             } else {
                 char *end = wadName + strlen ( wadName ) - 1;
@@ -498,7 +481,7 @@ void ReadSection ( FILE *file, int max, bool *array )
                 memset ( array, value, sizeof ( bool ) * max );
             } else {
                 count = sscanf ( ptr, "%d-%d", &low, &high );
-	    }
+            }
             ptr = strtok ( NULL, "," );
             if (( low < 0 ) || ( low >= max )) continue;
             switch ( count ) {
@@ -548,7 +531,7 @@ void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options
                 foundMap = true;
             } else if ( foundMap ) {
                 break;
-	    }
+            }
         }
         if ( ! foundMap ) {
             ch = ( char ) fgetc ( optionFile );
@@ -598,11 +581,11 @@ void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options
                     side = lineDef->sideDef [0];
                     if (( side != NO_SIDEDEF ) && ( array [ sideDef [ side ].sector ])) {
                         options->dontSplit [i] = true;
-		    }
+                    }
                     side = lineDef->sideDef [1];
                     if (( side != NO_SIDEDEF ) && ( array [ sideDef [ side ].sector ])) {
                         options->dontSplit [i] = true;
-		    }
+                    }
                 }
                 delete array;
             }
@@ -648,7 +631,7 @@ void PrintTime ( ULONG time )
 {
     FUNCTION_ENTRY ( NULL, "PrintTime", false );
 
-    GotoXY ( 63, startY );
+    GotoXY ( 65, startY );
     cprintf ( "%3ld.%03ld sec%s", time / 1000, time % 1000, ( time == 1000 ) ? "" : "s" );
 }
 
@@ -680,7 +663,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
 
         int oldSize = curLevel->BlockMapSize ();
         ULONG blockTime = CurrentTime ();
-        int saved = CreateBLOCKMAP ( curLevel, config.BlockMap.Compress );
+        int saved = CreateBLOCKMAP ( curLevel, config.BlockMap );
         *ellapsed += blockTime = CurrentTime () - blockTime;
         int newSize = curLevel->BlockMapSize ();
 
@@ -710,12 +693,12 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
         memset ( keep, config.Nodes.Unique, sizeof ( bool ) * curLevel->SectorCount ());
 
         sBSPOptions options;
-        options.algorithm = config.Nodes.Method;
-        options.showProgress = ! config.Nodes.Quiet;
+        options.algorithm      = config.Nodes.Method;
+        options.showProgress   = ! config.Nodes.Quiet;
         options.reduceLineDefs = config.Nodes.ReduceLineDefs;
-        options.ignoreLineDef = NULL;
-        options.dontSplit = NULL;
-        options.keepUnique = keep;
+        options.ignoreLineDef  = NULL;
+        options.dontSplit      = NULL;
+        options.keepUnique     = keep;
 
         ReadCustomFile ( curLevel, myList, &options );
 
@@ -734,7 +717,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
         if ( oldNodeCount ) cprintf ( "(%3d%%)", ( int ) ( 100.0 * curLevel->NodeCount () / oldNodeCount + 0.5 ));
         else cprintf ( "(****)" );
         cprintf ( "  " );
-        cprintf ( "SEGS - %4d/%-4d ", curLevel->SegCount (), oldSegCount );
+        cprintf ( "SEGS - %5d/%-5d ", curLevel->SegCount (), oldSegCount );
         if ( oldSegCount ) cprintf ( "(%3d%%)", ( int ) ( 100.0 * curLevel->SegCount () / oldSegCount + 0.5 ));
         else cprintf ( "(****)" );
 
@@ -750,7 +733,7 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
         ULONG oldEfficiency = CheckREJECT ( curLevel );
 
         ULONG rejectTime = CurrentTime (), efficiency;
-        bool special = CreateREJECT ( curLevel, config.Reject.Empty, config.Reject.Force, &efficiency );
+        bool special = CreateREJECT ( curLevel, config.Reject, &efficiency );
         *ellapsed += rejectTime = CurrentTime () - rejectTime;
 
         if ( special == false ) {
@@ -806,13 +789,13 @@ void PrintStats ( int totalLevels, ULONG totalTime, int totalUpdates )
             cprintf ( "%ld minute%s %ld.%03ld second%s - ", minutes, minutes > 1 ? "s" : "", tempTime / 1000, tempTime % 1000, ( tempTime == 1000 ) ? "" : "s" );
         } else {
             cprintf ( "%ld.%03ld second%s - ", totalTime / 1000, totalTime % 1000, ( totalTime == 1000 ) ? "" : "s"  );
-	}
+        }
 
         if ( totalUpdates ) {
             cprintf ( "%d Level%s need%s updating.\r\n", totalUpdates, totalUpdates > 1 ? "s" : "", config.WriteWAD ? "ed" : "" );
         } else {
             cprintf ( "No Levels need%s updating.\r\n", config.WriteWAD ? "ed" : "" );
-	}
+        }
 
         if ( totalTime == 0 ) {
             cprintf ( "WOW! Whole bunches of levels/sec!\r\n" );
@@ -820,7 +803,7 @@ void PrintStats ( int totalLevels, ULONG totalTime, int totalUpdates )
             cprintf ( "%f levels/sec\r\n", 1000.0 * totalLevels / totalTime );
         } else if ( totalLevels > 1 ) {
             cprintf ( "%f secs/level\r\n", totalTime / ( totalLevels * 1000.0 ));
-	}
+        }
     }
 }
 
@@ -843,7 +826,7 @@ int getOutputFile ( int index, char *argv [], char *wadFileName )
                 }
             } else {
                 ptr = argv [ index++ ];
-	    }
+            }
             if ( ptr ) strcpy ( wadFileName, ptr );
             if ( ch == 'X' ) config.Extract = true;
         }
@@ -885,20 +868,21 @@ int main ( int argc, char *argv [] )
         return -1;
     }
 
-    config.BlockMap.Rebuild = true;
-    config.BlockMap.Compress = true;
+    config.BlockMap.Rebuild     = true;
+    config.BlockMap.Compress    = true;
 
-    config.Nodes.Rebuild = true;
-    config.Nodes.Method = 1;
-    config.Nodes.Quiet = false;
-    config.Nodes.Unique = true;
+    config.Nodes.Rebuild        = true;
+    config.Nodes.Method         = 1;
+    config.Nodes.Quiet          = false;
+    config.Nodes.Unique         = true;
     config.Nodes.ReduceLineDefs = false;
 
-    config.Reject.Rebuild = true;
-    config.Reject.Empty = false;
-    config.Reject.Force = false;
+    config.Reject.Rebuild       = true;
+    config.Reject.Empty         = false;
+    config.Reject.Force         = false;
+    config.Reject.Connectivity  = true;
 
-    config.WriteWAD = true;
+    config.WriteWAD             = true;
 
     ReadConfigFile ( argv );
 
@@ -950,16 +934,16 @@ int main ( int argc, char *argv [] )
                 if ( config.Extract ) {
                     if ( myList->Extract ( levelNames, wadFileName ) == false ) {
                         fprintf ( stderr," Error writing to file!\n" );
-		    }
+                    }
                 } else {
                     if ( myList->Save ( wadFileName ) == false ) {
                         fprintf ( stderr," Error writing to file!\n" );
-		    }
+                    }
                 }
                 cprintf ( "\r\n" );
             } else {
                 cprintf ( "\r\nChanges would have been written to %s ( %s bytes )\n", wadFileName, ConvertNumber ( myList->FileSize ()));
-	    }
+            }
         }
         cprintf ( "\r\n" );
 

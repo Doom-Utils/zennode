@@ -275,12 +275,12 @@ void WAD::OpenFile ()
     // read in the WAD's directory info
     valid = true;
     readMasterDir ();
+
     if ( FindDir ( "TEXTURE2" )) registered = true;
 
     if ( FindDir ( "BEHAVIOR" )) wadType = wt_HEXEN;
     else if ( FindDir ( "M_HTIC" )) wadType = wt_HERETIC;
     else if ( FindDir ( "SHT2A0" )) wadType = wt_DOOM2;
-    else if ( FindDir ( "S_START" )) wadType = wt_DOOM;
 
     switch ( wadType ) {
         case wt_DOOM    : wadStyle = wst_FORMAT_1;	break;
@@ -289,7 +289,12 @@ void WAD::OpenFile ()
         case wt_HEXEN   : wadStyle = wst_FORMAT_3;	break;
         default :
             if ( mapStart ) wadStyle = ( toupper ( mapStart->name[0] ) == 'E' ) ? wst_FORMAT_1 : wst_FORMAT_2;
-    }	    						
+    }
+    if ( wadType == wt_UNKNOWN ) {
+        if ( wadStyle == wst_FORMAT_2 ) {
+            wadType = wt_DOOM2;
+        }
+    }
 }
 
 void WAD::CloseFile ()
@@ -546,7 +551,7 @@ bool WAD::SaveFile ( const char *newName )
 //                  fprintf ( stderr, "ERROR: WAD::SaveFile - Error writing entry %8.8s. (cached)\n", dir->name );
                 }
             } else {
-                void *ptr = ReadEntry ( dir, NULL );
+                char *ptr = ( char * ) ReadEntry ( dir, NULL );
                 if ( wadStatus != ws_OK ) {
                     errors = true;
 //                  fprintf ( stderr, "ERROR: WAD::SaveFile - Error reading entry %8.8s. (%04x)\n", dir->name, wadStatus );
@@ -555,7 +560,7 @@ bool WAD::SaveFile ( const char *newName )
                     errors = true;
 //                  fprintf ( stderr, "ERROR: WAD::SaveFile - Error writing entry %8.8s. (file copy)\n", dir->name );
                 }
-                delete ptr;////FIX ME
+                delete [] ptr;
             }
 	}
         dir->offset = offset;
@@ -933,7 +938,7 @@ bool wadList::Save ( const char *newName )
         for ( ULONG i = 0; i < dirSize; i++ ) {
             dir[i] = *srcDir->entry;
             long offset = ftell ( tmpFile );
-            void *ptr = srcDir->wad->ReadEntry ( srcDir->entry, NULL );
+            char *ptr = ( char * ) srcDir->wad->ReadEntry ( srcDir->entry, NULL );
             if ( srcDir->wad->Status () != ws_OK ) {
                 errors = true;
 //              fprintf ( stderr, "\nERROR: wadList::Save - Error reading entry %8.8s. (%04X)", srcDir->entry->name, srcDir->wad->Status ());
@@ -942,7 +947,7 @@ bool wadList::Save ( const char *newName )
                 errors = true;
 //                fprintf ( stderr, "\nERROR: wadList::Save - Error writing entry %8.8s.", srcDir->entry->name );
             }
-            delete ptr;////FIX ME
+            delete [] ptr;
             dir[i].offset = offset;
             srcDir++;
         }

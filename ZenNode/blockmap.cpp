@@ -32,11 +32,12 @@
 #include <stdlib.h>
 #include "common.hpp"
 #include "level.hpp"
+#include "ZenNode.hpp"
 
 struct sBlockList {
     int     firstIndex;			// Index of 1st blockList element matching this one
     int     offset;
-    int     count;					
+    int     count;
     int    *line;
 };
 
@@ -51,7 +52,7 @@ void AddLineDef ( sBlockList *block, int line )
     block->line [ block->count++ ] = line;
 }
 
-int CreateBLOCKMAP ( DoomLevel *level, bool compress )
+int CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options )
 {
     Status ( "Creating BLOCKMAP ... " );
 
@@ -73,7 +74,7 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
 
     int noCols = ( xRight - xLeft ) / 128 + 1;
     int noRows = ( yTop - yBottom ) / 128 + 1;
-    int totalSize = noCols * noRows;	       
+    int totalSize = noCols * noRows;
 
     sBlockList *blockList = new sBlockList [ totalSize ];
     for ( i = 0; i < totalSize; i++ ) {
@@ -109,7 +110,7 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
                 } while ( startY != endY );
             } else {
                 AddLineDef ( &blockList [ index ], i );
-	    }
+            }
         } else {
             if ( startY == endY ) {	// horizontal line
                 AddLineDef ( &blockList [ index ], i );
@@ -142,19 +143,19 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
 
                     AddLineDef ( &blockList [ index ], i );
                     while ( index != lastIndex ) {
-                        index += sx;	      
+                        index += sx;
                         AddLineDef ( &blockList [ index ], i );
                     }
 
                     index += sy * noCols;
-                    deltaX = ( 128 * dx ) * sy;			     
+                    deltaX = ( 128 * dx ) * sy;
 
                 } while ( ! done );
 
                 int lastIndex = endX + endY * noCols;
                 if ( index != lastIndex + sy * noCols ) {
                     AddLineDef ( &blockList [ lastIndex ], i );
-		}
+                }
             }
         }
     }
@@ -165,7 +166,7 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
     int blockListSize = 0, savings = 0;
     int zeroIndex = -1;
     for ( i = 0; i < totalSize; i++ ) {
-        if ( compress ) {
+        if ( options.Compress ) {
             if ( blockList [i].count == 0 ) {
                 if ( zeroIndex != -1 ) {
                     blockList [i].firstIndex = zeroIndex;
@@ -180,7 +181,7 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
                 int index = i - 1;
                 while ( index >= lastStart ) {
                     int count = blockList[i].count;
-                    if (( blockList[index].count == count ) && 
+                    if (( blockList[index].count == count ) &&
                         ( memcmp ( blockList[i].line, blockList[index].line, count * sizeof ( int )) == 0 )) {
                         blockList [i].firstIndex = index;
                         savings += count + 2;
@@ -196,7 +197,7 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
     }
 
     Status ( "Saving BLOCKMAP ... " );
-    int blockSize = sizeof ( wBlockMap ) + 
+    int blockSize = sizeof ( wBlockMap ) +
                     totalSize * sizeof ( SHORT ) +
                     blockListSize * sizeof ( SHORT );
     char *start = new char [ blockSize ];
@@ -216,11 +217,11 @@ int CreateBLOCKMAP ( DoomLevel *level, bool compress )
             *data++ = 0;
             for ( int x = 0; x < block->count; x++ ) {
                 *data++ = ( SHORT ) block->line [x];
-	    }
+            }
             *data++ = -1;
         } else {
             block->offset = blockList [ block->firstIndex ].offset;
-	}
+        }
     }
 
     for ( i = 0; i < totalSize; i++ ) {

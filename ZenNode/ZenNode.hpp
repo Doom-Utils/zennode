@@ -35,6 +35,26 @@
   #include "level.hpp"
 #endif
 
+struct sBlockMapOptions {
+    bool  Rebuild;
+    bool  Compress;
+};
+
+struct sNodeOptions {
+    bool  Rebuild;
+    int   Method;
+    bool  Quiet;
+    bool  Unique;
+    bool  ReduceLineDefs;
+};
+
+struct sRejectOptions {
+    bool  Rebuild;
+    bool  Empty;
+    bool  Force;
+    bool  Connectivity;
+};
+
 typedef unsigned short BAM;
 typedef long double REAL;	// Must have at least 50 significant bits
 
@@ -43,6 +63,7 @@ struct SEG {
     const wLineDef *LineDef;
     int             Sector;
     int             Side;
+    bool            Split;
     bool            DontSplit;
 };
 
@@ -106,7 +127,10 @@ struct sScoreInfo {
 #define IS_LEFT_RIGHT(s)	( s & 1 )
 #define FLIP(c,s)		( c ^ s )
 
-void CreateNODES ( DoomLevel *, sBSPOptions * );
+extern void CreateNODES ( DoomLevel *level, sBSPOptions *options );
+extern int  CreateBLOCKMAP ( DoomLevel *level, const sBlockMapOptions &options );
+extern bool CreateREJECT ( DoomLevel *level, const sRejectOptions &options, ULONG *efficiency );
+
 
 // ----- External Functions Required by ZenNode -----
 

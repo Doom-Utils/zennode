@@ -30,9 +30,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "common.hpp"
-#include "wad.hpp"
-#include "level.hpp"
 
 #if defined ( __OS2__ )
     #define INCL_DOS
@@ -49,6 +46,10 @@
 #else
     #error This program must be compiled as a 32-bit app.
 #endif
+
+#include "common.hpp"
+#include "wad.hpp"
+#include "level.hpp"
 
 #define VERSION		"1.00"
 #define MAX_LEVELS	50
@@ -216,9 +217,9 @@ const char *TypeName ( eWadType type )
         case wt_DOOM    : return "DOOM";
         case wt_DOOM2   : return "DOOM2";
         case wt_HERETIC : return "Heretic";
-        case wt_HEXEN   : return "Hexen"; 
+        case wt_HEXEN   : return "Hexen";
         default         : break;
-    }		      
+    }
     return "<Unknown>";
 }
 

@@ -4,7 +4,7 @@
 // Date:        26-October-1994
 // Programmer:  Marc Rousseau
 //
-// Description: 
+// Description:
 //
 // Copyright (c) 1994-2000 Marc Rousseau, All Rights Reserved.
 //

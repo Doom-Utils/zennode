@@ -43,8 +43,6 @@
 #include "ZenNode.hpp"
 #include "geometry.hpp"
 
-extern int CreateBLOCKMAP ( DoomLevel *level, bool compress );
-
 enum eVisibility {
     visUnknown,
     visVisible,
@@ -135,6 +133,8 @@ sSolidLine   **indexToSolid;
 sSolidLine   **testLines;
 const sPoint **polyPoints;
 
+static int   **distance;
+
 static long    X, Y, DX, DY;
 
 // ----- External Functions Required by ZenReject -----
@@ -186,7 +186,7 @@ bool FeaturesDetected ( DoomLevel *level )
     }
 
 done:
- 
+
     for ( int i = 0; i < noSectors; i++ ) {
         delete [] table [i];
     }
@@ -288,6 +288,9 @@ bool SetupLines ( DoomLevel *level )
         const sPoint *vertS = &vertices [ lineDef [i].start ];
         const sPoint *vertE = &vertices [ lineDef [i].end ];
 
+        // We can't handle 0 length lineDefs!
+        if ( vertS == vertE ) continue;
+
         if ( lineDef [i].flags & LDF_TWO_SIDED ) {
 
             int rSide = lineDef [i].sideDef [ RIGHT_SIDEDEF ];
@@ -310,7 +313,7 @@ bool SetupLines ( DoomLevel *level )
 
         line->index = i;
         line->start = vertS;
-        line->end = vertE;
+        line->end   = vertE;
     }
 
     return ( noSeeThruLines > 0 ) ? true : false;
@@ -382,11 +385,104 @@ void FindChildren ( DoomLevel *level )
     // Any more ideas on finding groups of children?
 }
 
+void CreateDistanceTable ( int noSectors, sSectorStuff *sector )
+{
+    Status ( "Calculating sector distances..." );
+
+    char *distBuffer  = new char [ sizeof ( int ) * noSectors * noSectors + sizeof ( int * ) * noSectors ];
+    distance = ( int ** ) distBuffer;
+    distBuffer += sizeof ( int * ) * noSectors;
+
+    int listRowSize = noSectors + 2;
+
+    USHORT *listBuffer = new USHORT [ listRowSize * noSectors * 2 ];
+    memset ( listBuffer, 0, sizeof ( USHORT ) * listRowSize * noSectors * 2 );
+
+    USHORT *list [2] = { listBuffer, listBuffer + listRowSize * noSectors };
+
+    for ( int i = 0; i < noSectors; i++ ) {
+        distance [i] = ( int * ) distBuffer;
+        distBuffer += sizeof ( int ) * noSectors;
+        // Set up the initial distances
+        for ( int j = 0; j < noSectors; j++ ) {
+            distance [i][j] = 0x7FFFFFFF;
+        }
+        // Prime the first list
+        list [0][i*listRowSize+0] = i;
+        list [0][i*listRowSize+1] = i;
+        list [0][i*listRowSize+2+i] = true;
+    }
+
+    int currIndex = 0, length = 0;
+    int loRow = 0, hiRow = noSectors - 1;
+
+    int count;
+
+    // Find the # of sectors between each pair of sectors
+    do {
+        count = 0;
+
+        int nextIndex = ( currIndex + 1 ) % 2;
+        USHORT *currList = list [currIndex] + 2 + loRow * listRowSize;
+        USHORT *nextList = list [nextIndex] + 2 + loRow * listRowSize;
+        currIndex = nextIndex;
+
+        int i = loRow, max = hiRow;
+        loRow = noSectors;
+        hiRow = 0;
+
+        for ( ; i <= max; i++ ) {
+            int loIndex = currList [-2];
+            int hiIndex = currList [-1];
+            int minIndex = noSectors, maxIndex = 0;
+            // See if this row needs to be processed
+            if ( loIndex <= hiIndex ) {
+                int startCount = count;
+                for ( int j = loIndex; j <= hiIndex; j++ ) {
+                    if ( currList [j] == false ) continue;
+                    if ( length < distance [i][j] ) {
+                        distance [i][j] = length;
+                        for ( int x = 0; x < sector [j].noNeighbors; x++ ) {
+                            int index = sector [j].neighbor [x] - sector;
+                            nextList [index] = true;
+                            if ( index < minIndex ) minIndex = index;
+                            if ( index > maxIndex ) maxIndex = index;
+                        }
+                        count++;
+                    }
+                    currList [j] = false;
+                }
+                // Should we process this row next time around?
+                if ( startCount != count ) {
+                    if ( i < loRow ) loRow = i;
+                    if ( i > hiRow ) hiRow = i;
+                }
+            }
+            nextList [-2] = minIndex;
+            nextList [-1] = maxIndex;
+            currList += listRowSize;
+            nextList += listRowSize;
+        }
+        length++;
+    } while ( count );
+
+    // Now mark all sectors with no path to each other as hidden
+    for ( int i = 0; i < noSectors; i++ ) {
+        for ( int j = i + 1; j < noSectors; j++ ) {
+            if ( distance [i][j] > length ) {
+                MarkVisibility ( i, j, visHidden );
+            }
+        }
+    }
+
+    delete [] listBuffer;
+}
+
 //
 // Create the sector table that records all the see-thru lines related to a
 //   sector and all of it's neighboring and child sectors.
 //
-void CreateSectorInfo ( DoomLevel *level )
+void CreateSectorInfo ( DoomLevel *level, bool checkPaths )
 {
     int noSectors  = level->SectorCount ();
 
@@ -426,6 +522,10 @@ void CreateSectorInfo ( DoomLevel *level )
     // Start with all lines as 'active'
     for ( int i = 0; i < noSectors; i++ ) {
         sector [i].noActiveLines = sector [i].noLines;
+    }
+
+    if ( checkPaths == true ) {
+        CreateDistanceTable ( noSectors, sector );
     }
 
     FindChildren ( level );
@@ -487,7 +587,8 @@ void PrepareBLOCKMAP ( DoomLevel *level )
 {
     blockMap = ( wBlockMap * ) level->GetBlockMap ();
     if ( blockMap == NULL ) {
-        CreateBLOCKMAP ( level, true );
+        sBlockMapOptions options = { true, true };
+        CreateBLOCKMAP ( level, options );
         blockMap = ( wBlockMap * ) level->GetBlockMap ();
     }
 
@@ -913,9 +1014,9 @@ int TrimLines ( sWorldInfo *world )
 // Find out which side of the poly-line the line is on
 //
 //  Return Values:
-//      1 - above ( not completely below ) the poly-line
+//      1 - above (not completely below) the poly-line
 //      0 - intersects the poly-line
-//     -1 - below the poly-line ( one or both end-points may touch the poly-line )
+//     -1 - below the poly-line (one or both end-points may touch the poly-line)
 //     -2 - can't tell start this segment
 //
 
@@ -930,10 +1031,10 @@ int Intersects ( const sPoint *p1, const sPoint *p2, const sPoint *t1, const sPo
     y1 = DX * ( t1->y - p1->y ) - DY * ( t1->x - p1->x );
     y2 = DX * ( t2->y - p1->y ) - DY * ( t2->x - p1->x );
 
-    // Eliminate the 2 easy cases ( t1 & t2 both above or below the x-axis )
+    // Eliminate the 2 easy cases (t1 & t2 both above or below the x-axis)
     if (( y1 > 0 ) && ( y2 > 0 )) return 1;
     if (( y1 <= 0 ) && ( y2 <= 0 )) return -1;
-    // t1->t2 crosses poly-Line segment ( or one point touches it and the other is above it )
+    // t1->t2 crosses poly-Line segment (or one point touches it and the other is above it)
 
     // Rotate & translate using t1->t2 as the +X-axis
     DX = t2->x - t1->x;
@@ -942,7 +1043,7 @@ int Intersects ( const sPoint *p1, const sPoint *p2, const sPoint *t1, const sPo
     y1 = DX * ( p1->y - t1->y ) - DY * ( p1->x - t1->x );
     y2 = DX * ( p2->y - t1->y ) - DY * ( p2->x - t1->x );
 
-    // Eliminate the 2 easy cases ( p1 & p2 both above or below the x-axis )
+    // Eliminate the 2 easy cases (p1 & p2 both above or below the x-axis)
     if (( y1 > 0 ) && ( y2 > 0 )) return -2;
     if (( y1 < 0 ) && ( y2 < 0 )) return -2;
 
@@ -1214,7 +1315,7 @@ bool FindObstacles ( sWorldInfo *world )
     // To be absolutely correct, we should create a list of obstacles
     // (ie: connected lineDefs completely enclosed by upperPoly & lowerPoly)
     // and see if any of them completely block the LOS
- 
+
     return false;
 }
 
@@ -1381,7 +1482,7 @@ int SortSector ( const void *ptr1, const void *ptr2 )
 // Create a mapping for see-thru lines that tries to put lines that affect
 //   the most sectors first.  As more sectors are marked visible/hidden, the
 //   number of remaining line pairs that must be checked drops.  By ordering
-//   the lines, we can speed things up quite a bit for just a little effort.
+//   the lines, we can speed things up quite a bit with just a little effort.
 //----------------------------------------------------------------------------
 int SetupLineMap ( int *lineMap, int noSectors )
 {
@@ -1427,7 +1528,7 @@ void LineComplete ( int sectorIndex, sSeeThruLine *line, int noSectors )
                 // Make a list of all children of this sector
                 if ( sec->noChildren > 0 ) {
                     for ( int j = 0; j < noSectors; j++ ) {
-                        sSectorStuff  *parent = sector [j].parent;
+                        sSectorStuff *parent = sector [j].parent;
                         while (( parent != NULL ) && ( parent != sec )) parent = parent->parent;
                         isChild [j] = ( parent != NULL ) ? true : false;
                     }
@@ -1457,15 +1558,15 @@ void LineComplete ( int sectorIndex, sSeeThruLine *line, int noSectors )
     }
 }
 
-bool CreateREJECT ( DoomLevel *level, bool empty, bool force, ULONG *efficiency )
+bool CreateREJECT ( DoomLevel *level, const sRejectOptions &options, ULONG *efficiency )
 {
-    if (( force == false ) && ( FeaturesDetected ( level ) == true )) {
+    if (( options.Force == false ) && ( FeaturesDetected ( level ) == true )) {
         return true;
     }
 
     int noSectors = level->SectorCount ();
     bool saveBits = level->hasChanged () ? false : true;
-    if ( empty ) {
+    if ( options.Empty ) {
         level->NewReject ((( noSectors * noSectors ) + 7 ) / 8, GetREJECT ( level, true, efficiency ), saveBits );
         return false;
     }
@@ -1477,7 +1578,7 @@ bool CreateREJECT ( DoomLevel *level, bool empty, bool force, ULONG *efficiency 
     if ( SetupLines ( level )) {
 
         // Make a list of which sectors contain others and their boundary lines
-        CreateSectorInfo ( level );
+        CreateSectorInfo ( level, options.Connectivity );
 
         // Mark the easy ones visible to speed things up later
         EliminateTrivialCases ( level );
@@ -1535,6 +1636,7 @@ bool CreateREJECT ( DoomLevel *level, bool empty, bool force, ULONG *efficiency 
         delete [] checkLine;
 
         // Clean up allocations made by CreateSectorInfo
+        delete [] distance;
         delete [] neighborList;
         delete [] sectorLines;
         delete [] isChild;
