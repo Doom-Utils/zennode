@@ -141,6 +141,53 @@ static long    X, Y, DX, DY;
 
 extern void Status ( char * );
 
+bool FeaturesDetected ( DoomLevel *level )
+{
+    int noSectors = level->SectorCount ();
+    char *ptr = ( char * ) level->GetReject ();
+    int bits = 8;
+    int data = *ptr++;
+    bool **table = new bool * [ noSectors ];
+    for ( int i = 0; i < noSectors; i++ ) {
+        table [i] = new bool [ noSectors ];
+        for ( int j = 0; j < noSectors; j++ ) {
+            table [i][j] = data & 1;
+            data >>= 1;
+            if ( --bits == 0 ) {
+                bits = 8;
+                data = *ptr++;
+            }
+        }
+    }
+
+    bool featureDetected = false;
+
+    // Look for "special" features
+    for ( int i = 0; i < noSectors; i++ ) {
+        // Make sure each sector can see itself
+        if ( table [i][i] != 0 ) {
+            featureDetected = true;
+            goto done;
+        }
+        for ( int j = i + 1; j < noSectors; j++ ) {
+            // Make sure that if I can see J, then J can see I
+            if ( table [i][j] != table [j][i] ) {
+                featureDetected = true;
+                goto done;
+            }
+        }
+    }
+
+done:
+ 
+    for ( int i = 0; i < noSectors; i++ ) {
+        delete [] table [i];
+    }
+    delete [] table;
+
+    return featureDetected;
+}
+
 //
 // Run through our rejectTable to create the actual REJECT resource
 //
@@ -1410,13 +1457,17 @@ void LineComplete ( int sectorIndex, sSeeThruLine *line, int noSectors )
     }
 }
 
-void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
+bool CreateREJECT ( DoomLevel *level, bool empty, bool force, ULONG *efficiency )
 {
+    if (( force == false ) && ( FeaturesDetected ( level ) == true )) {
+        return true;
+    }
+
     int noSectors = level->SectorCount ();
     bool saveBits = level->hasChanged () ? false : true;
     if ( empty ) {
         level->NewReject ((( noSectors * noSectors ) + 7 ) / 8, GetREJECT ( level, true, efficiency ), saveBits );
-        return;
+        return false;
     }
 
     PrepareREJECT ( noSectors );
@@ -1503,4 +1554,6 @@ void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency )
 
     // Finally, release our reject table data
     CleanUpREJECT ( noSectors );
+
+    return false;
 }

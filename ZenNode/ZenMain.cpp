@@ -74,7 +74,7 @@
     cLogger *gLogger = &myLogger;
 #endif
 
-#define VERSION		"1.0.1"
+#define VERSION		"1.0.2"
 #define BANNER          "ZenNode Version " VERSION " (c) 1994-2000 Marc Rousseau\r\n\r\n"
 #define CONFIG_FILENAME	"ZenNode.cfg"
 #define MAX_LEVELS	99
@@ -86,7 +86,7 @@
 char HammingTable [ 256 ];
 
 int  CreateBLOCKMAP ( DoomLevel *level, bool compress );
-void CreateREJECT ( DoomLevel *level, bool empty, ULONG *efficiency );
+bool CreateREJECT ( DoomLevel *level, bool empty, bool force, ULONG *efficiency );
 
 struct {
     struct {
@@ -103,6 +103,7 @@ struct {
     struct {
         bool  Rebuild;
         bool  Empty;
+        bool  Force;
     } Reject;
     bool  WriteWAD;
     bool  Extract;
@@ -167,6 +168,7 @@ void printHelp ()
     fprintf ( stdout, "        i                   - Ignore non-visible lineDefs\n" );
     fprintf ( stdout, "     -r[z]              %c - Rebuild REJECT resource\n", DEFAULT_CHAR );
     fprintf ( stdout, "        z                   - Insert empty REJECT resource\n" );
+    fprintf ( stdout, "        f                   - Rebuild even if special effects are detected\n" );
     fprintf ( stdout, "     -t                   - Don't write output file (test mode)\n" );
     fprintf ( stdout, "\n" );
     fprintf ( stdout, "     level - ExMy for DOOM / Heretic\n" );
@@ -225,6 +227,7 @@ bool parseREJECTArgs ( char *&ptr, bool setting )
 	}
         switch ( option ) {
             case 'Z' : config.Reject.Empty = setting;		break;
+            case 'F' : config.Reject.Force = setting;		break;
             default  : return true;
         }
         config.Reject.Rebuild = true;
@@ -719,15 +722,19 @@ bool ProcessLevel ( char *name, wadList *myList, ULONG *ellapsed )
         ULONG oldEfficiency = CheckREJECT ( curLevel );
 
         ULONG rejectTime = CurrentTime (), efficiency;
-        CreateREJECT ( curLevel, config.Reject.Empty, &efficiency );
+        bool special = CreateREJECT ( curLevel, config.Reject.Empty, config.Reject.Force, &efficiency );
         *ellapsed += rejectTime = CurrentTime () - rejectTime;
 
-        Status ( "" );
-        GotoXY ( startX, startY );
+        if ( special == false ) {
+            Status ( "" );
+            GotoXY ( startX, startY );
+            cprintf ( "REJECT - Efficiency: %3ld.%1ld%%/%2ld.%1ld%%", efficiency / 10, efficiency % 10,
+                                                                 oldEfficiency / 10, oldEfficiency % 10 );
+            PrintTime ( rejectTime );
+        } else {
+            Status ( "REJECT - Special effects detected - use -f to force an update" );
+        }
 
-        cprintf ( "REJECT - Efficiency: %3ld.%1ld%%/%2ld.%1ld%%", efficiency / 10, efficiency % 10,
-                                                             oldEfficiency / 10, oldEfficiency % 10 );
-        PrintTime ( rejectTime );
         cprintf ( "\r\n" );
         GetXY ( &dummyX, &startY );
     }
@@ -853,6 +860,7 @@ int main ( int argc, char *argv[] )
 
     config.Reject.Rebuild = true;
     config.Reject.Empty = false;
+    config.Reject.Force = false;
 
     config.WriteWAD = true;
 
