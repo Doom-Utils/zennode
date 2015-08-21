@@ -1,37 +1,19 @@
-//----------------------------------------------------------------------------
 //
-// File:        ZenReject.cpp
-// Date:        15-Dec-1995
-// Programmer:  Marc Rousseau
+// Copyright (c) 1995-2004 Marc Rousseau
 //
-// Description: This module contains the logic for the REJECT builder.
-//
-// Copyright (c) 1995-2004 Marc Rousseau, All Rights Reserved.
-//
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2 of the License, or
-// (at your option) any later version.
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307, USA.
+// DESCRIPTION:
+//     This module contains the logic for the REJECT builder.
 //
-// Revision History:
-//
-//   06-12-99	Reordered functions & removed all function prototypes
-//   06-14-99	Modified DrawBlockMapLine to elminate floating point & inlined calls to UpdateRow
-//   07-19-99	Added code to track child sectors and active lines (36% faster!)
-//   04-01-01	Added code to use graphs to reduce LOS calculations (way faster!)
-//   12-02-02   Updated graph code to do a more thorough job (subsumes older child code)
-//   01-18-04   Added support for RMB options
-//
-//----------------------------------------------------------------------------
 
 #include <limits.h>
 #include <math.h>

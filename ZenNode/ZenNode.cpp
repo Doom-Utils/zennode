@@ -1,63 +1,19 @@
-//----------------------------------------------------------------------------
 //
-// File:        ZenNode.cpp
-// Date:        26-Oct-1994
-// Programmer:  Marc Rousseau
+// Copyright (c) 1994-2004 Marc Rousseau
 //
-// Description: This module contains the logic for the NODES builder.
-//
-// Copyright (c) 1994-2004 Marc Rousseau, All Rights Reserved.
-//
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2 of the License, or
-// (at your option) any later version.
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307, USA.
+// DESCRIPTION:
+//     This module contains the logic for the NODES builder.
 //
-// Revision History:
-//
-//   06-??-95   Added LineDef alias list to speed up the process.
-//   07-07-95   Added currentAlias/Side/Flipped to speed up WhichSide.
-//   07-11-95   Initialized global variables in CreateNODES.
-//              Changed logic for static variable last in CreateSSector.
-//   10-05-95   Added convexList & extended the use of lineUsed.
-//   10-25-95   Changed from doubly linked lists to an array of SEGs.
-//   10-27-95   Added header to each function describing what it does.
-//   11-14-95   Fixed sideInfo so that a SEG is always to it's own right.
-//   12-06-95   Added code to support selective unique sectors & don't splits
-//   05-09-96   Added nodePool to reduced calls to new/delete for NODEs
-//   05-15-96   Reduced memory requirements for convexList & sectorInfo
-//   05-23-96   Added FACTOR_XXX to reduced memory requirements
-//   05-24-96   Removed all calls to new/delete during CreateNode
-//   05-31-96   Made WhichSide inline & moved the bulk of code to _WhichSide
-//   10-01-96   Reordered functions & removed all function prototypes
-//   07-31-00   Increased max subsector factor from 15 to 256
-//   10-29-00   Fixed _WhichSide & DivideSeg so that things finally(?) work!
-//   02-21-01   Fixed _WhichSide & DivideSeg so that things finally(?) work!
-//   02-22-01   Added vertSplitAlias to help _WhichSide's accuracy problem
-//   02-26-01   Removed vertSplitAlias - switched to 64-bit ints to solve overflow problem
-//   03-05-01   Fixed _WhichSide & DivideSeg so that things finally(?) work!
-//   03-05-01   Switched to 64-bit ints to solve overflow problem
-//   04-13-02   Changed vertex & ssector allocation to reallocate the free pool
-//   04-14-02   Fixed _WhichSide so that things finally(?) work! :-)
-//   04-16-02   Added more consistancy checks in DEBUG mode
-//   04-20-02   Switched to floating point math
-//   04-24-02   Fixed bug in _WhichSide for zero-length SEGs
-//   05-02-02   Simplified CreateNode & eliminated NODES structure
-//   05-04-02   Simplified use of aliases and flipping in WhichSide 
-//   05-05-02   Fixed double-int conversions to round correctly
-//   11-16-03   Converted code to work properly on 64 bit machines
-//   01-31-04   Added extra sector sort to SortByLineDef
-//
-//----------------------------------------------------------------------------
 
 #include <assert.h>
 #include <limits.h>
