@@ -52,7 +52,7 @@
 DBG_REGISTER ( __FILE__ );
 
 #define VERSION		"1.3"
-#define BANNER          "BSPInfo Version " VERSION " (c) 1995-2004 Marc Rousseau"
+#define BANNER          "bspinfo Version " VERSION " (c) 1995-2004 Marc Rousseau"
 #define MAX_LEVELS	99
 
 #if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
@@ -69,7 +69,7 @@ struct {
 
 void printHelp ()
 {
-    fprintf ( stderr, "Usage: bspInfo [-options] filename[.wad] [level[+level]]\n" );
+    fprintf ( stderr, "Usage: bspinfo [-options] filename[.wad] [level[+level]]\n" );
     fprintf ( stderr, "\n" );
     fprintf ( stderr, "     -x+ turn on option   -x- turn off option  %c = default\n", DEFAULT_CHAR );
     fprintf ( stderr, "\n" );

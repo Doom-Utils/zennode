@@ -104,7 +104,7 @@ int GCD ( int A, int B )
 
 void printHelp ()
 {
-    fprintf ( stderr, "Usage: nodediff {-options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
+    fprintf ( stderr, "Usage: bspdiff {-options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
     fprintf ( stderr, "\n" );
     fprintf ( stderr, "     -x+ turn on option   -x- turn off option  %c = default\n", DEFAULT_CHAR );
     fprintf ( stderr, "\n" );
@@ -404,7 +404,7 @@ done:
 
 int main ( int argc, const char *argv[] )
 {
-    fprintf ( stderr, "Compare Version %s (c) 2003-2004 Marc Rousseau\n\n", VERSION );
+    fprintf ( stderr, "bspdiff Version %s (c) 2003-2004 Marc Rousseau\n\n", VERSION );
 
     if ( argc == 1 ) {
         printHelp ();
