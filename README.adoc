@@ -1,4 +1,4 @@
-ZenNode v1.2.0
+ZenNode v1.2.1
 ==============
 
 This is directory tree includes the source code necessary to build ZenNode.
@@ -18,5 +18,5 @@ and Microsoft compilers.  Older versions have been compiled under OS/2 using
 Borland.  The code should be portable to other compilers, but it has never
 been tested.
 
-Enjoy,
+Enjoy, +
 Marc
