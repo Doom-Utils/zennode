@@ -9,7 +9,7 @@ WARNINGS = -Wall -Wno-format -Wstrict-prototypes -Wmissing-prototypes -Winline
 #CC       = /opt/intel/compiler60/ia32/bin/icc
 #CFLAGS   = -g -O3
 INCLUDES = -I../DOOM -I../common
-TARGETS  = ZenNode bspdiff bspinfo compare
+TARGETS  = ZenNode bspcomp bspdiff bspinfo
 
 CFLAGS  += -D__LINUX__
 
@@ -46,7 +46,7 @@ bspdiff: bspdiff.o console.o ../DOOM/wad.o ../DOOM/level.o $(LOGGER)
 bspinfo: bspinfo.o console.o ../DOOM/wad.o ../DOOM/level.o $(LOGGER)
 	$(CC) $(LIBS) -o $@ $^
 
-compare: compare.o console.o ../DOOM/wad.o ../DOOM/level.o $(LOGGER)
+bspcomp: bspcomp.o console.o ../DOOM/wad.o ../DOOM/level.o $(LOGGER)
 	$(CC) $(LIBS) -o $@ $^
 
 ZenReject.o: \
@@ -130,8 +130,8 @@ bspinfo.o: \
 	../DOOM/level.hpp	\
 	console.hpp
 
-compare.o: \
-	compare.cpp		\
+bspcomp.o: \
+	bspcomp.cpp		\
 	../common/common.hpp	\
 	../common/logger.hpp	\
 	../DOOM/wad.hpp		\

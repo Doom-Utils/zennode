@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
 //
-// File:        compare.cpp
+// File:        bspcomp.cpp
 // Date:        16-Jan-1996
 // Programmer:  Marc Rousseau
 //
@@ -59,7 +59,7 @@
 DBG_REGISTER ( __FILE__ );
 
 #define VERSION		"1.3"
-#define BANNER          "compare Version " VERSION " (c) 1996-2004 Marc Rousseau"
+#define BANNER          "bspcomp Version " VERSION " (c) 1996-2004 Marc Rousseau"
 #define MAX_LEVELS	99
 
 #define UNSUPPORTED_FEATURE	-1
@@ -81,7 +81,7 @@ void printHelp ()
 {
     FUNCTION_ENTRY ( NULL, "printHelp", true );
 
-    fprintf ( stderr, "Usage: compare {-options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
+    fprintf ( stderr, "Usage: bspcomp {-options} filename1[.wad] filename2[.wad] [level{+level}]\n" );
     fprintf ( stderr, "\n" );
     fprintf ( stderr, "     -x+ turn on option   -x- turn off option  %c = default\n", DEFAULT_CHAR );
     fprintf ( stderr, "\n" );
