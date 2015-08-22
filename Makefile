@@ -1,19 +1,28 @@
-CXXFLAGS += -Wall -Wextra -Idoom -Icommon -D__LINUX__
-TARGETS   = ZenNode bspcomp bspdiff bspinfo
+CXXFLAGS+=-Wall -Wextra -Idoom -Icommon -D__LINUX__
+TARGETS=ZenNode bspcomp bspdiff bspinfo
+DOCS=ZenNode.1 bspcomp.1 bspdiff.1 bspinfo.1
 
 ifdef WIN32
-CXXFLAGS  += -D__WIN32__
+CXXFLAGS+=-D__WIN32__
 endif
 
 ifdef DEBUG
-CXXFLAGS += -DDEBUG -fexceptions
-LOGGER    = common/logger/logger.o common/logger/string.o common/logger/linux-logger.o
-LIBS     += -lpthread -lrt
+CXXFLAGS+=-DDEBUG -fexceptions
+LOGGER=common/logger/logger.o common/logger/string.o common/logger/linux-logger.o
+LIBS+=-lpthread -lrt
 endif
 
-.PHONY: all clean install uninstall
+.PHONY: all clean man install uninstall
+
+# building the docs requires asciidoc
+.SUFFIXES: .1 .adoc .html
+.adoc.1:
+	a2x -f manpage $<
+.adoc.html:
+	a2x -d manpage -f xhtml $<
 
 all: $(TARGETS)
+man: $(DOCS)
 
 ZenNode:					\
   doom/level.o					\
@@ -55,13 +64,17 @@ clean:
 	rm -f */*.o $(TARGETS)
 
 prefix?=/usr/local
+mandir?=share/man
 target=$(DESTDIR)$(prefix)
 
-install: $(TARGETS)
+install: $(TARGETS) $(DOCS)
 	install -d $(target)/bin
-	install -m 755 ZenNode bspcomp bspdiff bspinfo $(target)/bin
+	install -d $(target)/$(mandir)/man1
+	install -m 755 $(TARGETS) $(target)/bin
+	install -m 644 $(DOCS) $(target)/$(mandir)/man1
 
 uninstall:
-	rm $(target)/bin/ZenNode $(target)/bin/bspcomp
-	rm $(target)/bin/bspdiff $(target)/bin/bspinfo
+	for doc in $(DOCS); do rm $(target)/$(mandir)/man1/$$doc; done
+	for bin in $(TARGETS); do rm $(target)/bin/$$bin; done
+	-rmdir -p $(target)/$(mandir)/man1
 	-rmdir -p $(target)/bin
