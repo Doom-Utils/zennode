@@ -1,0 +1,79 @@
+ZenNode(1)
+==========
+
+NAME
+----
+ZenNode - rebuild nodes for Doom engine maps
+
+SYNOPSIS
+--------
+*ZenNode* ['-b[c]'] ['-n[a=1,2,3|q|u|i]'] ['-r[zfgm]'] ['-t']
+ 'FILE'...  ['LEVEL'...] ['-o|x FILE']
+
+DESCRIPTION
+-----------
+ZenNode rebuilds nodes for Doom engine maps (including those for
+Heretic and Hexen).  In the process of building maps for these games,
+the level normally needs to be processed to include a complete
+binary-space partition (BSP) tree, and a reject table.  Each of these
+allows the engine to efficiently render a level and perform
+line-of-sight calculations to determine whether monsters can see a
+player.
+
+Many map editors today contain their own built-in node builder,
+however there are also a great deal that require an external one,
+generate bad nodes, or simply don't try at all.
+
+OPTIONS
+-------
+*-b, -bc*::
+    Rebuilds the blockmap.  This is used for collision detection.  Use
+    *-bc* to compress the BLOCKMAP.
+
+*-n, -na=[1|2|3], -nq, -nu, -ni*::
+    Rebuild the nodes, this is the BSP tree used so the engine
+    understands the fastest path to render any given scene.  *-na*
+    controls the algorithm. 1 minimizes splits, 2 minimizes depths, 3
+    minimizes time.  *-nq* quiets the output and doesn't display a
+    progress bar.  *-nu* ensures that all subsectors contain only a
+    single sector.  *-ni* ignores non-visible linedefs.
+
+*-r, -rz, -rf, -rg, -rm*::
+    Rebuilds the reject table, used for line-of-sight calculations,
+    determining whether a player and monster can see each other.
+    *-rz* inserts an empty reject table, *-rf* rebuilds even if
+    ZenNode would otherwise detect it as being unneeded, *-rg* uses
+    graphs to reduce line-of-sight calculations.  *-rm* processes an
+    RMB option file, which is the same name as the WAD being processed
+    but with a '.rej' extension.
+
+*-t*::
+    Test mode, does not write out a file.
+
+*FILE...*::
+    The file(s) to be processed, use + characters to specify
+    additional files.  If more than one, they will be combined into
+    the output file and the *-o* option is required.
+
+*LEVEL...*::
+    The level(s) to be processed, by default ZenNode will process all
+    levels contained in the WAD.  Like file names, use + to specify
+    multiple levels.  These must match the names of the levels in the
+    WAD directory tree.  For Doom and Heretic, this is normally ExMy.
+    For Doom II and Hexen, this is normally MAPxx.
+
+*-o FILE, -x FILE*::
+    The name of the output file.  By default, ZenNode will overwrite
+    the input file.
+
+The default options for ZenNode correspond to *-bc -na=1 -rg*.  Any of
+the features can be disabled by using a hyphen, *-b- -n- -r-* would
+effectively be a no-op run.
+
+SEE ALSO
+--------
+bspcomp(1) bspdiff(1) bspinfo(1)
+
+* http://doomwiki.org/wiki/Blockmap
+* http://doomwiki.org/wiki/Node
+* http://doomwiki.org/wiki/Reject

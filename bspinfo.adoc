@@ -1,0 +1,29 @@
+bspinfo(1)
+==========
+
+NAME
+----
+bspinfo - analyzes the contents of the BSP tree
+
+SYNOPSIS
+--------
+*bspinfo* 'FILE' ['LEVEL'...]
+
+DESCRIPTION
+-----------
+bspinfo analyzes the contents of the BSP tree, displaying information
+about it.  Can be useful to determine the complexity of the level or
+for debugging node builders, or comparing them.
+
+OPTIONS
+-------
+*FILE*::
+    File to analyze.
+
+*LEVEL...*::
+    The level(s) to analyze.  Specify multiple levels by separating
+    them with the + character.
+
+SEE ALSO
+--------
+bspcomp(1) bspdiff(1) ZenNode(1)

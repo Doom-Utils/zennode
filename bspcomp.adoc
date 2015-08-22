@@ -1,0 +1,31 @@
+bspcomp(1)
+==========
+
+NAME
+----
+bspcomp - Compares two reject tables and reports differences
+
+SYNOPSIS
+--------
+*bspcomp* 'FILE1' 'FILE2' ['LEVEL'...]
+
+DESCRIPTION
+-----------
+bspcomp compares the reject tables between two WADs.  This can be
+useful for debugging node builders or comparing between them.
+
+OPTIONS
+-------
+*FILE1*::
+    First file to compare.
+
+*FILE2*::
+    Second file to compare.
+
+*LEVEL...*::
+    The levels to compare.  Specify multiple levels by separating them
+    with the + character.
+
+SEE ALSO
+--------
+bspdiff(1) bspinfo(1) ZenNode(1)

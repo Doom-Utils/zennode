@@ -1,0 +1,31 @@
+bspdiff(1)
+==========
+
+NAME
+----
+bspdiff - Compares two node structures and reports differences
+
+SYNOPSIS
+--------
+*bspdiff* 'FILE1' 'FILE2' ['LEVEL'...]
+
+DESCRIPTION
+-----------
+bspdiff compares the node structures between two WADs.  This can be
+useful for debugging node builders or comparing between them.
+
+OPTIONS
+-------
+*FILE1*::
+    First file to compare.
+
+*FILE2*::
+    Second file to compare.
+
+*LEVEL...*::
+    The levels to compare.  Specify multiple levels by separating them
+    with the + character.
+
+SEE ALSO
+--------
+bspcomp(1) bspinfo(1) ZenNode(1)
