@@ -74,6 +74,6 @@ SEE ALSO
 --------
 bspcomp(1) bspdiff(1) bspinfo(1)
 
-* http://doomwiki.org/wiki/Blockmap
-* http://doomwiki.org/wiki/Node
-* http://doomwiki.org/wiki/Reject
+* https://doomwiki.org/wiki/Blockmap
+* https://doomwiki.org/wiki/Node
+* https://doomwiki.org/wiki/Reject
