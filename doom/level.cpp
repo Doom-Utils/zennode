@@ -253,7 +253,7 @@ bool DoomLevel::IsDirty () const
 
     return false;
 }
-
+
 void DoomLevel::CleanUpEntry ( sLevelLump *entry )
 {
     FUNCTION_ENTRY ( this, "DoomLevel::CleanUpEntry", true );
@@ -290,7 +290,7 @@ void DoomLevel::CleanUp ()
     m_ThingData   = NULL;
     m_LineDefData = NULL;
 }
-
+
 #if ( BYTE_ORDER == BIG_ENDIAN )
 
 void DoomLevel::AdjustByteOrderMap ( int byteOrder )
@@ -499,7 +499,7 @@ void DoomLevel::AdjustByteOrder ( int byteOrder )
 }
 
 #endif
-
+
 void DoomLevel::ReplaceVertices ( int *map, wVertex *newVertices, int count )
 {
     wLineDef *lineDef = ( wLineDef * ) GetLineDefs ();
@@ -604,7 +604,7 @@ void DoomLevel::PackVertices ()
 
     ReplaceVertices ( used, newVertices, count );
 }
-
+
 void DoomLevel::ConvertRaw1ToThing ( int max, wThing1 *src, wThing *dest )
 {
     FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertRaw1ToThing", true );
@@ -660,7 +660,7 @@ void DoomLevel::ConvertThingToRaw2 ( int max, wThing *src, wThing2 *dest )
         memcpy ( dest [i].arg, src [i].arg, sizeof ( dest[i].arg ));
     }
 }
-
+
 void DoomLevel::ConvertRaw1ToLineDef ( int max, wLineDef1 *src, wLineDef *dest )
 {
     FUNCTION_ENTRY ( NULL, "DoomLevel::ConvertRaw1ToLineDef", true );
@@ -714,7 +714,7 @@ void DoomLevel::ConvertLineDefToRaw2 ( int max, wLineDef *src, wLineDef2 *dest )
         memcpy ( dest [i].arg, src [i].arg, sizeof ( dest[i].arg ));
     }
 }
-
+
 bool DoomLevel::LoadThings ( bool hexenFormat )
 {
     FUNCTION_ENTRY ( this, "DoomLevel::LoadThings", true );
@@ -881,7 +881,7 @@ bool DoomLevel::Load ()
 
     return valid;
 }
-
+
 bool DoomLevel::LoadHexenInfo ()
 {
     FUNCTION_ENTRY ( this, "DoomLevel::LoadHexenInfo", true );
@@ -956,7 +956,7 @@ bool DoomLevel::LoadHexenInfo ()
 
     return true;
 }
-
+
 void DoomLevel::AddToWAD ( WAD *m_Wad )
 {
     FUNCTION_ENTRY ( this, "DoomLevel::AddToWAD", true );
@@ -986,7 +986,7 @@ void DoomLevel::AddToWAD ( WAD *m_Wad )
     // Switch back to native byte ordering
     AdjustByteOrder ( BYTE_ORDER );
 }
-
+
 void DoomLevel::StoreThings ()
 {
     FUNCTION_ENTRY ( this, "DoomLevel::StoreThings", true );
@@ -1091,7 +1091,7 @@ bool DoomLevel::UpdateWAD ()
 
     return changed;
 }
-
+
 void DoomLevel::NewEntry ( sLevelLump *entry, int newCount, void *newData )
 {
     FUNCTION_ENTRY ( this, "DoomLevel::NewEntry", true );

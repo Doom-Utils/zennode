@@ -140,7 +140,7 @@ WAD::~WAD ()
 
     free ( m_Name );
 }
-
+
 bool WAD::EnlargeDirectory ( int holePos, int entries )
 {
     int newSize = m_Header.dirSize + entries;
@@ -222,7 +222,7 @@ void WAD::FindMarkers ()
     m_FlatStart   = FindDir ( "F_START" );
     m_FlatEnd     = FindDir ( "F_END", m_FlatStart );
 }
-
+
 bool WAD::ReadHeader ( wadHeader *header )
 {
     ReadBytes ( header, sizeof ( wadHeader ));
@@ -320,7 +320,7 @@ UINT32 WAD::IndexOf ( const wadDirEntry *entry ) const
 {
     return (( entry < m_Directory ) || ( entry > m_Directory + m_Header.dirSize )) ? -1 : entry - m_Directory;
 }
-
+
 void WAD::SetList ( wadList *_list )
 {
     m_List = _list;
@@ -389,7 +389,7 @@ void WAD::Seek ( UINT32 offset )
         m_Status = ws_SEEK_ERROR;
     }
 }
-
+
 void WAD::ReadBytes ( void *ptr , UINT32 size, UINT32 count )
 {
     m_Status = ws_OK;
@@ -399,7 +399,7 @@ void WAD::ReadBytes ( void *ptr , UINT32 size, UINT32 count )
         m_Status = ws_READ_ERROR;
     }
 }
-
+
 void *WAD::ReadEntry ( const char *name, UINT32 *size, const wadDirEntry *start, const wadDirEntry *end, bool cache )
 {
     return ReadEntry ( FindDir ( name, start, end ), size, cache );
@@ -468,7 +468,7 @@ bool WAD::WriteEntry ( const wadDirEntry *entry, UINT32 newSize, void *newStuff,
 
     return true;
 }
-
+
 void WAD::OpenFile ()
 {
     if ( m_File != NULL ) fclose ( m_File );
@@ -520,7 +520,7 @@ void WAD::OpenFile ()
         }
     }
 }
-
+
 void WAD::CloseFile ()
 {
     m_bValid      = false;
@@ -549,7 +549,7 @@ void WAD::CloseFile ()
 
     memset ( &m_Header, 0, sizeof ( m_Header ));
 }
-
+
 const wadDirEntry *WAD::GetDir ( UINT32 index ) const
 {
     return ( index >= m_Header.dirSize ) ? ( const wadDirEntry * ) NULL : &m_Directory [index];
@@ -586,7 +586,7 @@ bool WAD::HasChanged () const
 
     return changed;
 }
-
+
 bool WAD::InsertBefore ( const wLumpName *name, UINT32 newSize, void *newStuff, bool owner, const wadDirEntry *entry )
 {
     UINT32 index = IndexOf ( entry );
@@ -624,7 +624,7 @@ bool WAD::InsertAfter ( const wLumpName *name, UINT32 newSize, void *newStuff, b
 
     return retVal;
 }
-
+
 bool WAD::Remove ( const wLumpName *lump, const wadDirEntry *start, const wadDirEntry *end )
 {
     const wadDirEntry *entry = FindDir ( *lump, start, end );
@@ -634,14 +634,14 @@ bool WAD::Remove ( const wLumpName *lump, const wadDirEntry *start, const wadDir
 
     return ReduceDirectory ( index, 1 );
 }
-
+
 /*
 // TBD
 int  InsertBefore ( const wLumpName *, UINT32, void *, bool, const wadDirEntry * = NULL );
 int  InsertAfter ( const wLumpName *, UINT32, void *, bool, const wadDirEntry * = NULL );
 // TBD
 */
-
+
 bool WAD::SaveFile ( const char *newName )
 {
     if ( newName == NULL ) newName = m_Name;
@@ -752,7 +752,7 @@ bool WAD::SaveFile ( const char *newName )
 
     return true;
 }
-
+
 wadList::wadList () :
     m_DirSize ( 0 ),
     m_MaxSize ( 0 ),
@@ -835,7 +835,7 @@ void wadList::UpdateDirectory ()
         ptr = ptr->Next;
     }
 }
-
+
 bool wadList::Add ( WAD *wad )
 {
     if (( m_Type == wt_UNKNOWN ) && ( m_Style == wst_UNKNOWN )) {
@@ -924,7 +924,7 @@ bool wadList::Remove ( WAD *wad )
 
     return found;
 }
-
+
 UINT32 wadList::IndexOf ( const wadListDirEntry *entry ) const
 {
     return (( entry < m_Directory ) || ( entry > m_Directory + m_DirSize )) ? -1 : entry - m_Directory;
@@ -1006,7 +1006,7 @@ void wadList::AddDirectory ( WAD *wad, bool check )
         count--;
     }
 }
-
+
 const wadListDirEntry *wadList::GetDir ( UINT32 index ) const
 {
     return ( index >= m_DirSize ) ? ( const wadListDirEntry * ) NULL : &m_Directory [index];
@@ -1048,7 +1048,7 @@ bool wadList::Contains ( WAD *wad ) const
     }
     return false;
 }
-
+
 bool wadList::Save ( const char *newName )
 {
     if ( IsEmpty ()) return false;

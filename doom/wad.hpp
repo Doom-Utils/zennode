@@ -124,7 +124,7 @@ public:
     virtual bool readData ( FILE *, UINT32 *, void ** ) const = 0;
     virtual bool writeData ( FILE *, UINT32, void * ) const = 0;
 };
-
+
 class WAD {
 
     char               *m_Name;
@@ -247,7 +247,7 @@ inline eWadType    WAD::Type () const           { return m_Type; }
 inline eWadStyle   WAD::Style () const          { return m_Style; }
 inline bool        WAD::IsValid () const        { return m_bValid; }
 inline bool        WAD::IsRegistered () const   { return m_bRegistered; }
-
+
 struct wadListDirEntry {
     WAD               *wad;
     const wadDirEntry *entry;

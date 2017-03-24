@@ -47,7 +47,7 @@
 
 #define UNSUPPORTED_FEATURE	-1
 #define UNRECOGNIZED_PARAMETER	-2
-
+
 #if defined ( __GNUC__ )
 
 #define stricmp strcasecmp
@@ -58,7 +58,7 @@ extern int getch ();
 extern bool kbhit ();
 
 #endif
-
+
 int GCD ( int A, int B )
 {
     if ( A < 0 ) A = -A; else if ( A == 0 ) return 1;
@@ -100,7 +100,7 @@ void printHelp ()
     fprintf ( stderr, "     level - ExMy for DOOM / Heretic\n" );
     fprintf ( stderr, "             MAPxx for DOOM II / HEXEN\n" );
 }
-
+
 int parseArgs ( int index, const char *argv[] )
 {
     bool errors = false;
@@ -113,7 +113,7 @@ int parseArgs ( int index, const char *argv[] )
     if ( errors ) fprintf ( stderr, "\n" );
     return index;
 }
-
+
 int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], wadList *list )
 {
     int index = 0, errors = 0;
@@ -157,7 +157,7 @@ int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], 
     if ( errors ) fprintf ( stderr, "\n" );
     return argIndex;
 }
-
+
 void EnsureExtension ( char *fileName, const char *ext )
 {
     size_t length = strlen ( fileName );
@@ -234,7 +234,7 @@ wadList *getInputFiles ( const char *cmdLine, char *wadFileName )
 
     return myList;
 }
-
+
 template <class T> inline T sgn ( T val ) { return ( val > 0 ) ? 1 : ( val < 0 ) ? -1 : 0; }
 
 void NormalizeNODES ( wNode *node, int noNodes )
@@ -390,7 +390,7 @@ done:
 
     return mismatches;
 }
-
+
 int main ( int argc, const char *argv[] )
 {
     fprintf ( stderr, "bspdiff Version %s (c) 2003-2004 Marc Rousseau\n\n", VERSION );

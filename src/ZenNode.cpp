@@ -94,7 +94,7 @@ static long Y3 = getenv ( "ZEN_Y3" ) ? atol ( getenv ( "ZEN_Y3" )) : 1;
 static long Y4 = getenv ( "ZEN_Y4" ) ? atol ( getenv ( "ZEN_Y4" )) : 0;
 
 static SEG *(*PartitionFunction) ( SEG *, int );
-
+
 //----------------------------------------------------------------------------
 //  Create a list of SEGs from the *important* sidedefs.  A sidedef is
 //    considered important if:
@@ -196,7 +196,7 @@ static SEG *CreateSegs ( DoomLevel *level, sBSPOptions *options )
 
     return segStart;
 }
-
+
 //----------------------------------------------------------------------------
 //  Calculate the set of variables used frequently that are based on the
 //    currently selected SEG to be used as a partition line.
@@ -291,7 +291,7 @@ static void FindBounds ( wBound *bound, SEG *seg, int noSegs )
         if ( hiY > bound->maxy ) bound->maxy = ( INT16 ) hiY;
     }
 }
-
+
 //----------------------------------------------------------------------------
 //  Determine which side of the partition line the given SEG lies.  A quick
 //    check is made based on the sector containing the SEG.  If the sector
@@ -424,7 +424,7 @@ static int WhichSide ( SEG *seg )
 #define WhichSide dbgWhichSide
 
 #endif
-
+
 //----------------------------------------------------------------------------
 //  Create a list of aliases vs LINEDEFs that indicates which side of a given
 //    alias a LINEDEF is on.
@@ -448,7 +448,7 @@ static void CreateSideInfo ( DoomLevel *level )
         temp += level->LineDefCount ();
     }
 }
-
+
 //----------------------------------------------------------------------------
 //  Return an index for a vertex at (x,y).  If an existing vertex exists,
 //    return it, otherwise, create a new one if room is left.
@@ -577,7 +577,7 @@ static UINT16 CreateSSector ( SEG *segs, int noSegs )
 
     return ( UINT16 ) ssectorCount++;
 }
-
+
 static int SortByAngle ( const void *ptr1, const void *ptr2 )
 {
     FUNCTION_ENTRY ( NULL, "SortByAngle", true );
@@ -588,7 +588,7 @@ static int SortByAngle ( const void *ptr1, const void *ptr2 )
     if ( dif ) return dif;
     return (( SEG * ) ptr1)->Data.flip - (( SEG * ) ptr2)->Data.flip;
 }
-
+
 //----------------------------------------------------------------------------
 //  Create a list of aliases.  These are all the unique lines within the map.
 //    Each linedef is assigned an alias.  All subsequent calculations are
@@ -649,7 +649,7 @@ static int GetLineDefAliases ( DoomLevel *level, SEG *segs, int noSegs )
 
     return noAliases;
 }
-
+
 #if defined ( DEBUG )
 
     static void DumpSegs ( SEG *seg, int noSegs )
@@ -923,7 +923,7 @@ retry:
 
     return pSeg ? true : false;
 }
-
+
 //----------------------------------------------------------------------------
 //  ALGORITHM 1: 'ZenNode Classic'
 //    This is the original algorithm used by ZenNode.  It simply attempts
@@ -1012,7 +1012,7 @@ next:
 
     return pSeg;
 }
-
+
 //----------------------------------------------------------------------------
 //  ALGORITHM 2: 'ZenNode Quality'
 //    This is the 2nd algorithm used by ZenNode.  It attempts to keep the
@@ -1055,7 +1055,7 @@ int sortMetric2 ( const void *ptr1, const void *ptr2 )
     if ((( sScoreInfo * ) ptr2)->metric1 > (( sScoreInfo * ) ptr1)->metric1 ) return  1;
     return (( sScoreInfo * ) ptr1)->index - (( sScoreInfo * ) ptr2)->index;
 }
-
+
 static SEG *Algorithm2 ( SEG *segs, int noSegs )
 {
     FUNCTION_ENTRY ( NULL, "Algorithm2", true );
@@ -1174,7 +1174,7 @@ next:
     SEG *pSeg = noScores ? &segs [ score [0].index ] : NULL;
     return pSeg;
 }
-
+
 //----------------------------------------------------------------------------
 //  ALGORITHM 3: 'ZenNode Lite'
 //    This is a modified version of the original algorithm used by ZenNode.
@@ -1271,7 +1271,7 @@ next:
 
     return pSeg;
 }
-
+
 //----------------------------------------------------------------------------
 //  Check to see if the list of segs contains more than one sector and at least
 //    one of them requires "unique subsectors".
@@ -1593,7 +1593,7 @@ static UINT16 GenerateUniqueSectors ( SEG *segs, int noSegs )
 
     return ( UINT16 ) nodeCount++;
 }
-
+
 //----------------------------------------------------------------------------
 //  Recursively create the actual NODEs.  The given list of SEGs is analyzed
 //    and a partition is chosen.  If no partition can be found, a leaf node
@@ -1681,7 +1681,7 @@ static UINT16 CreateNode ( SEG *segs, int *noSegs )
 
     return ( UINT16 ) nodeCount++;
 }
-
+
 wVertex  *GetVertices ()
 {
     FUNCTION_ENTRY ( NULL, "GetVertices", true );
@@ -1743,7 +1743,7 @@ wSegs *GetSegs ()
 
     return finalSegs;
 }
-
+
 //----------------------------------------------------------------------------
 //  Wrapper function that calls all the necessary functions to prepare the
 //    BSP tree and insert the new data into the level.  All screen I/O is

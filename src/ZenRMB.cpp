@@ -60,7 +60,7 @@ sOptionTableInfo ParseTable [] = {
     { "SAFE",       "NL",  OPTION_SAFE,       ParseGeneric   },
     { "TRACE",      "L",   OPTION_TRACE,      ParseGeneric   }
 };
-
+
 static const char *parseText;
 static int         parseLine;
 static int         lastLine;
@@ -347,7 +347,7 @@ done:
 
     return retVal;
 }
-
+
 void PrintOption ( FILE *file, sRejectOptionRMB *option )
 {
     const sOptionTableInfo *info = option->Info;

@@ -134,7 +134,7 @@ void MoveDown ( int delta )
     curY += delta;
     VioSetCurPos ( curY, 0, hVio );
 }
-
+
 #elif defined ( __WIN32__ )
 
 #if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )

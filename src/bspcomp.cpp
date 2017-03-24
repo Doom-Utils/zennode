@@ -57,7 +57,7 @@ DBG_REGISTER ( __FILE__ );
 #if defined ( __BORLANDC__ )
     #pragma option -x -xf
 #endif
-
+
 #if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
 
 #define stricmp strcasecmp
@@ -65,7 +65,7 @@ DBG_REGISTER ( __FILE__ );
 extern char *strupr ( char *ptr );
 
 #endif
-
+
 void printHelp ()
 {
     FUNCTION_ENTRY ( NULL, "printHelp", true );
@@ -77,7 +77,7 @@ void printHelp ()
     fprintf ( stderr, "     level - ExMy for DOOM / Heretic\n" );
     fprintf ( stderr, "             MAPxx for DOOM II / HEXEN\n" );
 }
-
+
 int parseArgs ( int index, const char *argv[] )
 {
     FUNCTION_ENTRY ( NULL, "parseArgs", true );
@@ -118,7 +118,7 @@ int parseArgs ( int index, const char *argv[] )
 
     return index;
 }
-
+
 int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], wadList *list1, wadList *list2 )
 {
     FUNCTION_ENTRY ( NULL, "getLevels", true );
@@ -176,7 +176,7 @@ int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], 
 
     return argIndex;
 }
-
+
 void EnsureExtension ( char *fileName, const char *ext )
 {
     FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
@@ -269,7 +269,7 @@ wadList *getInputFiles ( const char *cmdLine, char *wadFileName )
 
     return myList;
 }
-
+
 int CompareREJECT ( DoomLevel *srcLevel, DoomLevel *tgtLevel )
 {
     FUNCTION_ENTRY ( NULL, "CompareREJECT", true );
@@ -414,7 +414,7 @@ done:
 
     return change;
 }
-
+
 #if defined ( __BORLANDC__ )
     #include <dir.h>
 #endif

@@ -130,7 +130,7 @@ struct sSectorRMB {
     int            BlindLo;
     int            BlindHi;
 };
-
+
 static sGraphTable    graphTable;
 
 static int            loRow;
@@ -163,7 +163,7 @@ static const sPoint **polyPoints;
 static int            maxMapDistance;
 
 static long    X, Y, DX, DY;
-
+
 bool FeaturesDetected ( DoomLevel *level )
 {
     FUNCTION_ENTRY ( NULL, "FeaturesDetected", true );
@@ -262,7 +262,7 @@ void UpdateProgress ( int stage, double percent )
                       ( stage == 2 ) ? "REJECT - Analyzing lines %0.1f%%" : "REJECT - ??? %0.1f%%", percent );
     Status ( buffer );
 }
-
+
 void MarkVisibility ( int sector1, int sector2, UINT8 visibility )
 {
     FUNCTION_ENTRY ( NULL, "MarkVisibility", false );
@@ -354,7 +354,7 @@ bool SetupLines ( DoomLevel *level )
 
     return ( noTransLines > 0 ) ? true : false;
 }
-
+
 //
 // Mark sectors sec1 & sec2 as neighbors of each other
 //
@@ -416,7 +416,7 @@ sSector *CreateSectorInfo ( DoomLevel *level )
 
     return sector;
 }
-
+
 int **CreateDistanceTable ( sSector *sector, int noSectors )
 {
     FUNCTION_ENTRY ( NULL, "CreateDistanceTable", true );
@@ -514,7 +514,7 @@ int **CreateDistanceTable ( sSector *sector, int noSectors )
 
     return distanceTable;
 }
-
+
 int DFS ( sGraph *graph, sSector *sector )
 {
     FUNCTION_ENTRY ( NULL, "DFS", false );
@@ -658,7 +658,7 @@ void InitializeGraphs ( sSector *sector, int noSectors )
         }
     }
 }
-
+
 void HideSectorFromComponents ( sSector *key, sSector *root, sSector *sec )
 {
     FUNCTION_ENTRY ( NULL, "HideSectorFromComponents", false );
@@ -673,7 +673,7 @@ void HideSectorFromComponents ( sSector *key, sSector *root, sSector *sec )
         MarkVisibility ( sec->index, graph->sector [i]->index, VIS_HIDDEN );
     }
 }
-
+
 void AddGraph ( sGraph *graph, sSector *sector )
 {
     FUNCTION_ENTRY ( NULL, "AddGraph", false );
@@ -725,7 +725,7 @@ sGraph *QuickGraph ( sSector *root )
 
     return graph;
 }
-
+
 void EliminateTrivialCases ( sSector *sector, int noSectors )
 {
     FUNCTION_ENTRY ( NULL, "EliminateTrivialCases", true );
@@ -755,7 +755,7 @@ void EliminateTrivialCases ( sSector *sector, int noSectors )
         }
     }
 }
-
+
 void PrepareREJECT ( int noSectors )
 {
     FUNCTION_ENTRY ( NULL, "PrepareREJECT", true );
@@ -851,7 +851,7 @@ void CleanUpBLOCKMAP ()
     delete [] blockMapArray;
     delete blockMap;
 }
-
+
 //
 // Adjust the two line so that:
 //   1) If one line bisects the other:
@@ -920,7 +920,7 @@ bool AdjustLinePair ( sTransLine *src, sTransLine *tgt, bool *bisects )
 
     return true;
 }
-
+
 inline void UpdateRow ( int column, int row )
 {
     FUNCTION_ENTRY ( NULL, "UpdateRow", false );
@@ -1011,7 +1011,7 @@ void DrawBlockMapLine ( const sPoint *p1, const sPoint *p2 )
         UpdateRow ( endX, endY );
     }
 }
-
+
 void MarkBlockMap ( sWorldInfo *world )
 {
     FUNCTION_ENTRY ( NULL, "MarkBlockMap", true );
@@ -1097,7 +1097,7 @@ void GetBounds ( const sPoint *ss, const sPoint *se, const sPoint *ts, const sPo
         }
     }
 }
-
+
 bool TrimSetBounds ( sLineSet *set )
 {
     FUNCTION_ENTRY ( NULL, "TrimSetBounds", true );
@@ -1224,7 +1224,7 @@ int TrimLines ( const sTransLine *src, const sTransLine *tgt, sLineSet *set )
 
     return linesLeft;
 }
-
+
 //
 // Find out which side of the poly-line the line is on
 //
@@ -1284,7 +1284,7 @@ int FindSide ( sMapLine *line, sPolyLine *poly )
     }
     return completelyBelow ? -1 : 1;
 }
-
+
 void AddToPolyLine ( sPolyLine *poly, sSolidLine *line )
 {
     FUNCTION_ENTRY ( NULL, "AddToPolyLine", true );
@@ -1368,7 +1368,7 @@ bool PolyLinesCross ( sPolyLine *upper, sPolyLine *lower )
 
     return false;
 }
-
+
 bool CorrectForNewStart ( sPolyLine *poly )
 {
     FUNCTION_ENTRY ( NULL, "CorrectForNewStart", true );
@@ -1410,7 +1410,7 @@ bool CorrectForNewEnd ( sPolyLine *poly )
     }
     return false;
 }
-
+
 bool AdjustEndPoints ( sTransLine *left, sTransLine *right, sPolyLine *upper, sPolyLine *lower )
 {
     FUNCTION_ENTRY ( NULL, "AdjustEndPoints", true );
@@ -1459,7 +1459,7 @@ bool AdjustEndPoints ( sTransLine *left, sTransLine *right, sPolyLine *upper, sP
 
     return (( changed == true ) && ( PolyLinesCross ( upper, lower ) == true )) ? false : true;
 }
-
+
 bool FindPolyLines ( sWorldInfo *world )
 {
     FUNCTION_ENTRY ( NULL, "FindPolyLines", true );
@@ -1527,7 +1527,7 @@ bool FindPolyLines ( sWorldInfo *world )
 
     return true;
 }
-
+
 bool FindObstacles ( sWorldInfo *world )
 {
     FUNCTION_ENTRY ( NULL, "FindObstacles", true );
@@ -1544,7 +1544,7 @@ bool FindObstacles ( sWorldInfo *world )
 
     return false;
 }
-
+
 void InitializeWorld ( sWorldInfo *world, sTransLine *src, sTransLine *tgt )
 {
     FUNCTION_ENTRY ( NULL, "InitializeWorld", true );
@@ -1626,7 +1626,7 @@ bool CheckLOS ( sTransLine *src, sTransLine *tgt )
 
     return true;
 }
-
+
 bool DivideRegion ( sTransLine *src, sTransLine *tgt )
 {
     FUNCTION_ENTRY ( NULL, "DivideRegion", true );
@@ -1660,7 +1660,7 @@ bool DivideRegion ( sTransLine *src, sTransLine *tgt )
 
     return isVisible;
 }
-
+
 UINT8 GetLineVisibility ( const sTransLine *srcLine, const sTransLine *tgtLine )
 {
     FUNCTION_ENTRY ( NULL, "GetLineVisibility", true );
@@ -1800,7 +1800,7 @@ void MarkPairVisible ( sTransLine *srcLine, sTransLine *tgtLine )
     MarkVisibility ( srcLine->rightSector, tgtLine->leftSector, VIS_VISIBLE );
     MarkVisibility ( srcLine->rightSector, tgtLine->rightSector, VIS_VISIBLE );
 }
-
+
 //----------------------------------------------------------------------------
 //  Sort sectors so the the most critical articulation points are placed first
 //----------------------------------------------------------------------------
@@ -1865,7 +1865,7 @@ int SetupLineMap ( sTransLine **lineMap, sSector **sectorList, int maxSectors )
 
     return maxIndex;
 }
-
+
 bool ShouldTest ( sTransLine *src, int key, sTransLine *tgt, int sector )
 {
     long y1 = src->DX * ( tgt->start->y - src->start->y ) - src->DY * ( tgt->start->x - src->start->x );
@@ -2056,7 +2056,7 @@ void ProcessSector ( sSector *sector )
         }
     }
 }
-
+
 bool NeedDistances ( const sRejectOptionRMB *rmb )
 {
     FUNCTION_ENTRY ( NULL, "NeedDistances", true );

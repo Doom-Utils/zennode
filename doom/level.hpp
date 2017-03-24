@@ -157,7 +157,7 @@ struct wBlockMap {
     UINT16      noRows;
 //    UINT16    data [];
 };
-
+
 class DoomLevel {
 
     struct sLevelLump {

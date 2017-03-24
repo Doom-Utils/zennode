@@ -77,7 +77,7 @@ sOptionsRMB rmbOptionTable [MAX_WADS];
 #if defined ( __GNUC__ ) || defined ( __INTEL_COMPILER )
     extern char *strupr ( char * );
 #endif
-
+
 void printHelp ()
 {
     FUNCTION_ENTRY ( NULL, "printHelp", true );
@@ -108,7 +108,7 @@ void printHelp ()
     fprintf ( stdout, "\n" );
     fprintf ( stdout, "     level - ExMy for DOOM/Heretic or MAPxx for DOOM II/HEXEN\n" );
 }
-
+
 bool parseBLOCKMAPArgs ( char *&ptr, bool setting )
 {
     FUNCTION_ENTRY ( NULL, "parseBLOCKMAPArgs", true );
@@ -183,7 +183,7 @@ bool parseREJECTArgs ( char *&ptr, bool setting )
     }
     return false;
 }
-
+
 int parseArgs ( int index, const char *argv [] )
 {
     FUNCTION_ENTRY ( NULL, "parseArgs", true );
@@ -227,7 +227,7 @@ int parseArgs ( int index, const char *argv [] )
 
     return index;
 }
-
+
 void ReadConfigFile ( const char *argv [] )
 {
     FUNCTION_ENTRY ( NULL, "ReadConfigFile", true );
@@ -284,7 +284,7 @@ void ReadConfigFile ( const char *argv [] )
     fclose ( configFile );
     if ( errors ) fprintf ( stderr, "\n" );
 }
-
+
 int getLevels ( int argIndex, const char *argv [], char names [][MAX_LUMP_NAME], wadList *list )
 {
     FUNCTION_ENTRY ( NULL, "getLevels", true );
@@ -337,7 +337,7 @@ int getLevels ( int argIndex, const char *argv [], char names [][MAX_LUMP_NAME],
 
     return argIndex;
 }
-
+
 bool ReadOptionsRMB ( const char *wadName, sOptionsRMB *options )
 {
     FUNCTION_ENTRY ( NULL, "ReadOptionsRMB", true );
@@ -387,7 +387,7 @@ bool ReadOptionsRMB ( const char *wadName, sOptionsRMB *options )
 
     return false;
 }
-
+
 void EnsureExtension ( char *fileName, const char *ext )
 {
     FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
@@ -488,7 +488,7 @@ wadList *getInputFiles ( const char *cmdLine, char *wadFileName )
 
     return myList;
 }
-
+
 void ReadSection ( FILE *file, int max, bool *array )
 {
     FUNCTION_ENTRY ( NULL, "ReadSection", true );
@@ -631,7 +631,7 @@ void ReadCustomFile ( DoomLevel *curLevel, wadList *myList, sBSPOptions *options
 
     fclose ( optionFile );
 }
-
+
 int CheckREJECT ( DoomLevel *curLevel )
 {
     FUNCTION_ENTRY ( NULL, "CheckREJECT", true );
@@ -661,7 +661,7 @@ int CheckREJECT ( DoomLevel *curLevel )
 
     return ( int ) ( 1000.0 * count / ( noSectors * noSectors ) + 0.5 );
 }
-
+
 void PrintTime ( UINT32 time )
 {
     FUNCTION_ENTRY ( NULL, "PrintTime", false );
@@ -816,7 +816,7 @@ bool ProcessLevel ( char *name, wadList *myList, UINT32 *ellapsed )
 
     return changed;
 }
-
+
 void PrintStats ( int totalLevels, UINT32 totalTime, int totalUpdates )
 {
     FUNCTION_ENTRY ( NULL, "PrintStats", true );
@@ -847,7 +847,7 @@ void PrintStats ( int totalLevels, UINT32 totalTime, int totalUpdates )
         }
     }
 }
-
+
 int getOutputFile ( int index, const char *argv [], char *wadFileName )
 {
     FUNCTION_ENTRY ( NULL, "getOutputFile", true );
@@ -895,7 +895,7 @@ char *ConvertNumber ( UINT32 value )
     while ( *ptr == ' ' ) ptr++;
     return ptr;
 }
-
+
 int main ( int argc, const char *argv [] )
 {
     FUNCTION_ENTRY ( NULL, "main", true );

@@ -108,7 +108,7 @@ int parseArgs ( int index, const char *argv [] )
 
     return index;
 }
-
+
 int getLevels ( int argIndex, const char *argv [], char names [][MAX_LUMP_NAME], wadList *list )
 {
     FUNCTION_ENTRY ( NULL, "getLevels", true );
@@ -161,7 +161,7 @@ int getLevels ( int argIndex, const char *argv [], char names [][MAX_LUMP_NAME],
 
     return argIndex;
 }
-
+
 void EnsureExtension ( char *fileName, const char *ext )
 {
     FUNCTION_ENTRY ( NULL, "EnsureExtension", true );
@@ -254,7 +254,7 @@ wadList *getInputFiles ( const char *cmdLine, char *wadFileName )
 
     return myList;
 }
-
+
 const wNode *nodes;
 int totalDepth;
 
