@@ -57,7 +57,7 @@ bspcomp:					\
 	$(CXX) $(LIBS) -o $@ $^
 
 clean:
-	rm -f */*.o $(TARGETS)
+	rm -f *.1 *.html docbook-xsl.css */*.o $(TARGETS)
 
 prefix?=/usr/local
 mandir?=share/man
