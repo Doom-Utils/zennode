@@ -1,10 +1,6 @@
-CXXFLAGS+=-Wall -Wextra -Idoom -Icommon -D__LINUX__
+CXXFLAGS+=-Idoom -Icommon -D__LINUX__
 TARGETS=ZenNode bspcomp bspdiff bspinfo
 DOCS=ZenNode.1 bspcomp.1 bspdiff.1 bspinfo.1
-
-ifdef WIN32
-CXXFLAGS+=-D__WIN32__
-endif
 
 ifdef DEBUG
 CXXFLAGS+=-DDEBUG -fexceptions
@@ -17,9 +13,9 @@ endif
 # building the docs requires asciidoc
 .SUFFIXES: .1 .adoc .html
 .adoc.1:
-	a2x -f manpage $<
+	TZ=UTC a2x -f manpage $<
 .adoc.html:
-	a2x -d manpage -f xhtml $<
+	TZ=UTC a2x -d manpage -f xhtml $<
 
 all: $(TARGETS)
 man: $(DOCS)
@@ -68,10 +64,8 @@ mandir?=share/man
 target=$(DESTDIR)$(prefix)
 
 install: $(TARGETS) $(DOCS)
-	install -d $(target)/bin
-	install -d $(target)/$(mandir)/man1
-	install -m 755 $(TARGETS) $(target)/bin
-	install -m 644 $(DOCS) $(target)/$(mandir)/man1
+	install -Dm 755 $(TARGETS) -t $(target)/bin
+	install -Dm 644 $(DOCS) -t $(target)/$(mandir)/man1
 
 uninstall:
 	for doc in $(DOCS); do rm $(target)/$(mandir)/man1/$$doc; done
