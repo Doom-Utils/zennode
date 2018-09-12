@@ -43,8 +43,8 @@ wadFilter **WAD::sm_Filter;
 
 static int _init ()
 {
-    if ( sizeof ( wadHeader ) != 12 ) fprintf ( stderr, "sanity check: sizeof ( %s ) = %d (expected %d)\n", "wadHeader", sizeof ( wadHeader ), 12 );
-    if ( sizeof ( wadDirEntry ) != 16 ) fprintf ( stderr, "sanity check: sizeof ( %s ) = %d (expected %d)\n", "wadDirEntry", sizeof ( wadDirEntry ), 16 );
+    if ( sizeof ( wadHeader ) != 12 ) fprintf ( stderr, "sanity check: sizeof ( %s ) = %zu (expected %d)\n", "wadHeader", sizeof ( wadHeader ), 12 );
+    if ( sizeof ( wadDirEntry ) != 16 ) fprintf ( stderr, "sanity check: sizeof ( %s ) = %zu (expected %d)\n", "wadDirEntry", sizeof ( wadDirEntry ), 16 );
     return 0;
 }
 
