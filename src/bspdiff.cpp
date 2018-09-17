@@ -130,13 +130,19 @@ int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], 
     if ( WAD::IsMap ( ptr )) {
         argIndex++;
         while ( ptr ) {
-            if ( WAD::IsMap ( ptr ))
-                if ( list->FindWAD ( ptr ))
+            if ( WAD::IsMap ( ptr )) {
+                if ( list->FindWAD ( ptr )) {
                     strcpy ( names [index++], ptr );
-                else
-                    fprintf ( stderr, "  Could not find %s\n", ptr, errors++ );
-            else
-                fprintf ( stderr, "  %s is not a valid name for a level\n", ptr, errors++ );
+                }
+                else {
+                    fprintf ( stderr, "  Could not find %s\n", ptr );
+                    errors++;
+                }
+            }
+            else {
+                fprintf ( stderr, "  %s is not a valid name for a level\n", ptr );
+                errors++;
+            }
             ptr = strtok ( NULL, "+" );
         }
     } else {
@@ -144,10 +150,13 @@ int getLevels ( int argIndex, const char *argv[], char names [][MAX_LUMP_NAME], 
         const wadListDirEntry *dir = list->GetDir ( 0 );
         for ( int i = 0; i < size; i++ ) {
             if ( dir->wad->IsMap ( dir->entry->name )) {
-                if ( index == MAX_LEVELS )
-                    fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name, errors++ );
-                else
+                if ( index == MAX_LEVELS ) {
+                    fprintf ( stderr, "ERROR: Too many levels in WAD - ignoring %s!\n", dir->entry->name );
+                    errors++;
+                }
+                else {
                     memcpy ( names [index++], dir->entry->name, MAX_LUMP_NAME );
+                }
             }
             dir++;
         }
