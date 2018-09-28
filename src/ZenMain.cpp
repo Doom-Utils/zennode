@@ -216,7 +216,7 @@ int parseArgs ( int index, const char *argv [] )
         if ( localError ) {
             errors = true;
             int offset = ptr - localCopy - 1;
-            size_t width = strlen ( ptr ) + 1;
+            int width = (int) strlen ( ptr ) + 1;
             fprintf ( stderr, "Unrecognized parameter '%*.*s'\n", width, width, argv [index] + offset );
         }
         free ( localCopy );
@@ -275,7 +275,7 @@ void ReadConfigFile ( const char *argv [] )
             if ( localError ) {
                 errors = true;
                 int offset = basePtr - lineBuffer - 1;
-                size_t width = strlen ( basePtr ) + 1;
+                int width = (int) strlen ( basePtr ) + 1;
                 fprintf ( stderr, "Unrecognized configuration option '%*.*s'\n", width, width, lineBuffer + offset );
             }
         }
