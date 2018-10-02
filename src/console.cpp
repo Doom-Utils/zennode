@@ -89,7 +89,7 @@ UINT32 CurrentTime ()
     return time;
 }
 
-void Status ( char *message )
+void Status ( const char *message )
 {
     int len = strlen ( message );
     VioWrtCharStr (( BYTE * ) message, len, startY, startX, hVio );
@@ -281,7 +281,7 @@ void MoveDown ( int delta )
     SetConsoleCursorPosition ( hOutput, pos );
 }
 
-void Status ( char *message )
+void Status ( const char *message )
 {
     DWORD count;
     DWORD len = ( DWORD ) strlen ( message );
@@ -504,7 +504,7 @@ void GotoXY ( UINT32 x, UINT32 y )
     curY = y;
 }
 
-void Status ( char *message )
+void Status ( const char *message )
 {
     fprintf ( console, "\033[%dG%s\033[K", startX, message );
     fflush ( console );

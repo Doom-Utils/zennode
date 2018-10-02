@@ -53,7 +53,7 @@ void Put ( char *ptr, int length );
 
 // ----- External Functions Required by ZenNode -----
 
-void Status ( char *message );
+void Status ( const char *message );
 void GoRight ();
 void GoLeft ();
 void Backup ();
