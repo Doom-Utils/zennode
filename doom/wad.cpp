@@ -233,7 +233,7 @@ bool WAD::ReadHeader ( wadHeader *header )
 #endif
 
     if ( ! IS_TYPE ( header->type, IWAD_ID ) && ! IS_TYPE ( header->type, PWAD_ID )) {
-        fprintf ( stderr, "Invalid WAD header type '%4.4s' (expected '%4.4s' or '%4.4s')\n", header->type, &IWAD_ID, &PWAD_ID );
+        fprintf ( stderr, "Invalid WAD header type '%4.4s' (expected '%4.4s' or '%4.4s')\n", header->type, (char*) &IWAD_ID, (char*) &PWAD_ID );
         return false;
     }
 
